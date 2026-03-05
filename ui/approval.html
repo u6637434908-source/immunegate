@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ImmuneGate – Approval Required</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0f1117;
+      --surface:     #1a1d27;
+      --surface2:    #222537;
+      --border:      #2e3248;
+      --text:        #e8eaf6;
+      --text-muted:  #7b82b0;
+      --low:         #22c55e;
+      --medium:      #f59e0b;
+      --high:        #f97316;
+      --critical:    #ef4444;
+      --allow:       #22c55e;
+      --deny:        #ef4444;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+    }
+
+    /* ── Header ── */
+    .header {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .header-text h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+    .header-text p  { font-size: 12px; color: var(--text-muted); }
+
+    /* ── Card ── */
+    .card {
+      width: 100%;
+      max-width: 720px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .card-body { padding: 16px; }
+
+    /* ── Risk Score ── */
+    .risk-row {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .score-circle {
+      width: 88px; height: 88px;
+      border-radius: 50%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      border: 3px solid;
+      flex-shrink: 0;
+    }
+    .score-circle .score-num {
+      font-size: 28px; font-weight: 800; line-height: 1;
+    }
+    .score-circle .score-label {
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    .risk-details { flex: 1; }
+    .risk-details h2 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .risk-details p  { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
+
+    /* ── Score Breakdown ── */
+    .breakdown-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .breakdown-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+    .breakdown-item .val {
+      font-size: 20px; font-weight: 700; line-height: 1;
+      margin-bottom: 4px;
+    }
+    .breakdown-item .lbl {
+      font-size: 10px; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    /* ── Reasons ── */
+    .reason-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .reason-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .reason-num {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 1px;
+    }
+
+    /* ── Rules ── */
+    .rule-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .rule-tag {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      color: #a5b4fc;
+    }
+
+    /* ── Preview ── */
+    .preview-field { margin-bottom: 12px; }
+    .preview-field:last-child { margin-bottom: 0; }
+    .preview-label {
+      font-size: 10px; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.6px;
+      margin-bottom: 4px;
+    }
+    .preview-value {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px;
+      word-break: break-all;
+    }
+    .preview-value.warning-box {
+      border-color: #f97316;
+      color: #f97316;
+      background: rgba(249, 115, 22, 0.08);
+      font-family: inherit;
+      font-size: 13px;
+    }
+    .preview-value.content-box {
+      max-height: 120px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    /* File list for dry-run */
+    .file-list {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .file-list-header {
+      display: grid;
+      grid-template-columns: 1fr 80px 130px;
+      gap: 8px;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .file-row {
+      display: grid;
+      grid-template-columns: 1fr 80px 130px;
+      gap: 8px;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+    .file-row:last-child { border-bottom: none; }
+    .file-row .file-size { color: var(--text-muted); text-align: right; }
+    .file-row .file-date { color: var(--text-muted); text-align: right; }
+
+    /* ── Action row ── */
+    .action-meta {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;
+    }
+    .badge {
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-verb   { background: rgba(99,102,241,0.2); color: #a5b4fc; }
+    .badge-tool   { background: rgba(168,85,247,0.2); color: #d8b4fe; }
+    .badge-dest   { background: rgba(239,68,68,0.2);  color: #fca5a5; }
+    .badge-trust  { background: rgba(234,179,8,0.2);  color: #fde047; }
+    .badge-contaminated { background: rgba(239,68,68,0.3); color: #fca5a5; border: 1px solid rgba(239,68,68,0.5); }
+
+    /* ── Buttons ── */
+    .button-row {
+      width: 100%; max-width: 720px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 12px; margin-top: 8px;
+    }
+    .btn {
+      padding: 14px 24px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px;
+      transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: -0.2px;
+    }
+    .btn:hover  { opacity: 0.9; transform: translateY(-1px); }
+    .btn:active { opacity: 1;   transform: translateY(0); }
+
+    .btn-deny {
+      background: rgba(239,68,68,0.15);
+      border: 2px solid rgba(239,68,68,0.5);
+      color: #ef4444;
+    }
+    .btn-approve {
+      background: rgba(34,197,94,0.15);
+      border: 2px solid rgba(34,197,94,0.5);
+      color: #22c55e;
+    }
+    .btn:disabled {
+      opacity: 0.4; cursor: not-allowed; transform: none;
+    }
+
+    /* ── Outcome overlay ── */
+    .outcome {
+      width: 100%; max-width: 720px;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 700;
+      display: none;
+    }
+    .outcome.approved {
+      background: rgba(34,197,94,0.1);
+      border: 2px solid rgba(34,197,94,0.4);
+      color: #22c55e;
+    }
+    .outcome.denied {
+      background: rgba(239,68,68,0.1);
+      border: 2px solid rgba(239,68,68,0.4);
+      color: #ef4444;
+    }
+    .outcome p { font-size: 13px; font-weight: 400; color: var(--text-muted); margin-top: 6px; }
+
+    /* ── Danger signals ── */
+    .danger-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .danger-tag {
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      background: rgba(239,68,68,0.2);
+      border: 1px solid rgba(239,68,68,0.4);
+      color: #fca5a5;
+    }
+
+    /* Loading state */
+    .loading { text-align: center; color: var(--text-muted); padding: 48px; }
+
+    /* ── Utility ── */
+    .separator { width: 100%; max-width: 720px; height: 1px; background: var(--border); margin: 4px 0; display: none; }
+    .monospace { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="logo">🛡️</div>
+    <div class="header-text">
+      <h1>ImmuneGate</h1>
+      <p>Security &amp; Trust Layer — Approval Required</p>
+    </div>
+  </div>
+
+  <div id="app">
+    <div class="loading">Lade Aktions-Daten…</div>
+  </div>
+
+  <script>
+  // ═══════════════════════════════════════════════════════════════
+  //  HELPERS
+  // ═══════════════════════════════════════════════════════════════
+
+  function riskLevel(score) {
+    if (score >= 90) return { label: 'Critical', color: '#ef4444' };
+    if (score >= 70) return { label: 'High',     color: '#f97316' };
+    if (score >= 40) return { label: 'Medium',   color: '#f59e0b' };
+    return                  { label: 'Low',      color: '#22c55e' };
+  }
+
+  function formatBytes(bytes) {
+    if (bytes == null) return '—';
+    if (bytes < 1024)        return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString('de-DE', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      });
+    } catch { return iso; }
+  }
+
+  function esc(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  PREVIEW RENDERER (one function per preview.type)
+  // ═══════════════════════════════════════════════════════════════
+
+  function renderPreview(preview, action) {
+    if (!preview) return '<p style="color:var(--text-muted)">Kein Preview verfügbar.</p>';
+
+    const type = preview.type || 'generic';
+
+    if (type === 'delete') return renderDeletePreview(preview, action);
+    if (type === 'send')   return renderSendPreview(preview);
+    if (type === 'write')  return renderWritePreview(preview);
+    if (type === 'upload') return renderUploadPreview(preview);
+    return renderGenericPreview(preview);
+  }
+
+  function renderDeletePreview(p, action) {
+    let html = '';
+
+    // Target path
+    html += field('Ziel-Pfad', `<span class="monospace">${esc(p.target)}</span>`);
+
+    // Warning
+    if (p.warning) {
+      html += field('Warnung', `<div class="preview-value warning-box">⚠️ ${esc(p.warning)}</div>`, true);
+    }
+
+    // Dry-run file list
+    if (p.files && p.files.length > 0) {
+      const rows = p.files.map(f => `
+        <div class="file-row">
+          <div>${esc(f.path)}</div>
+          <div class="file-size">${formatBytes(f.size)}</div>
+          <div class="file-date">${formatDate(f.modified)}</div>
+        </div>`).join('');
+
+      html += `
+        <div class="preview-field">
+          <div class="preview-label">Betroffene Dateien (${p.files.length})</div>
+          <div class="file-list">
+            <div class="file-list-header">
+              <div>Pfad</div><div style="text-align:right">Größe</div><div style="text-align:right">Geändert</div>
+            </div>
+            ${rows}
+          </div>
+        </div>`;
+    } else if (p.dry_run_note) {
+      html += field('Dry-Run', `<div class="preview-value">${esc(p.dry_run_note)}</div>`, true);
+    }
+
+    // Recovery plan
+    if (p.recovery_plan) {
+      html += field('Recovery', `<div class="preview-value">${esc(p.recovery_plan)}</div>`, true);
+    }
+
+    return html;
+  }
+
+  function renderSendPreview(p) {
+    let html = '';
+    html += field('Empfänger', `<span class="monospace">${esc(p.recipient)}</span>`);
+
+    // Domain risk (uses backend classification: high / medium / low)
+    const domain     = p.domain || '';
+    const domainRisk = p.domain_risk || 'medium';
+    const domainMeta = {
+      high:   { color: '#ef4444', icon: '🚨', label: '— Bekannter externer Anbieter!' },
+      medium: { color: '#f59e0b', icon: '⚠️', label: '— Externe Domain' },
+      low:    { color: '#22c55e', icon: '✅', label: '— Interne Domain' },
+    }[domainRisk] || { color: '#f59e0b', icon: '⚠️', label: '' };
+
+    html += field('Domain',
+      `<div class="preview-value" style="border-color:${domainMeta.color};color:${domainMeta.color}">
+        ${domainMeta.icon} ${esc(domain)} ${domainMeta.label}
+      </div>`, true);
+
+    if (p.subject) {
+      html += field('Betreff', `<div class="preview-value">${esc(p.subject)}</div>`, true);
+    }
+
+    // Full body (no truncation – user must see everything before approving)
+    const bodyText = p.body || p.content || '';
+    if (bodyText) {
+      html += field('Nachrichteninhalt (vollständig)',
+        `<div class="preview-value content-box">${esc(bodyText)}</div>`, true);
+    }
+
+    if (p.warning) {
+      html += field('Warnung', `<div class="preview-value warning-box">⚠️ ${esc(p.warning)}</div>`, true);
+    }
+
+    return html;
+  }
+
+  function renderWritePreview(p) {
+    let html = '';
+
+    // New file badge
+    if (p.is_new_file) {
+      html += `<div style="margin-bottom:10px">
+        <span class="badge" style="background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.4)">
+          ✨ Neue Datei
+        </span>
+      </div>`;
+    }
+
+    html += field('Ziel-Datei', `<span class="monospace">${esc(p.target)}</span>`);
+
+    if (p.sensitivity && p.sensitivity !== 'unknown') {
+      const sensColor = {
+        secret: '#ef4444', confidential: '#f97316',
+        internal: '#f59e0b', public: '#22c55e'
+      }[p.sensitivity.toLowerCase()] || '#7b82b0';
+      html += field('Sensitivität',
+        `<div class="preview-value" style="border-color:${sensColor};color:${sensColor}">
+          ${esc(p.sensitivity.toUpperCase())}
+        </div>`, true);
+    }
+
+    // Diff view: before/after always present from backend
+    if (p.before !== undefined && p.after !== undefined) {
+      html += renderDiff(p.before, p.after, p.is_new_file);
+    }
+
+    return html;
+  }
+
+  function renderUploadPreview(p) {
+    let html = '';
+    html += field('Ziel', `<span class="monospace">${esc(p.destination)}</span>`);
+
+    if (p.visibility) {
+      html += field('Sichtbarkeit',
+        `<div class="preview-value">${esc(p.visibility)}</div>`, true);
+    }
+
+    if (p.warning) {
+      html += field('Warnung', `<div class="preview-value warning-box">⚠️ ${esc(p.warning)}</div>`, true);
+    }
+
+    return html;
+  }
+
+  function renderGenericPreview(p) {
+    let html = '';
+    if (p.target) html += field('Ziel', `<span class="monospace">${esc(p.target)}</span>`);
+    return html || '<p style="color:var(--text-muted)">Keine weiteren Details.</p>';
+  }
+
+  function renderDiff(before, after, isNewFile = false) {
+    // Neue Datei: alles als "hinzugefügt" anzeigen
+    if (isNewFile || before === '') {
+      const lines = (after || '').split('\n');
+      const diffHtml = lines.map(l =>
+        `<div style="background:rgba(34,197,94,0.12);color:#86efac;padding:1px 8px">+&nbsp;${esc(l)}</div>`
+      ).join('');
+      const label = isNewFile ? 'Neue Datei – Inhalt' : 'Neuer Inhalt';
+      return `
+        <div class="preview-field">
+          <div class="preview-label">${label} (${lines.length} Zeilen)</div>
+          <div class="preview-value content-box" style="padding:4px 0;font-family:'SF Mono','Fira Code',monospace;font-size:12px">
+            ${diffHtml || '<span style="color:var(--text-muted);padding:4px 8px;display:block">(leer)</span>'}
+          </div>
+        </div>`;
+    }
+
+    // Zeilenbasierter Diff: LCS-ähnliche Darstellung (sequential)
+    const bLines = before.split('\n');
+    const aLines = after.split('\n');
+
+    // Einfacher sequentieller Vergleich: markiere Unterschiede zeilenweise
+    const maxLen  = Math.max(bLines.length, aLines.length);
+    let diffHtml  = '';
+    let removed   = 0;
+    let added     = 0;
+
+    for (let i = 0; i < maxLen; i++) {
+      const bLine = bLines[i];
+      const aLine = aLines[i];
+      if (bLine === aLine) {
+        // Kontext-Zeile (unverändert)
+        diffHtml += `<div style="color:var(--text-muted);padding:1px 8px">&nbsp;&nbsp;${esc(bLine ?? '')}</div>`;
+      } else {
+        if (bLine !== undefined) {
+          diffHtml += `<div style="background:rgba(239,68,68,0.12);color:#fca5a5;padding:1px 8px">-&nbsp;${esc(bLine)}</div>`;
+          removed++;
+        }
+        if (aLine !== undefined) {
+          diffHtml += `<div style="background:rgba(34,197,94,0.12);color:#86efac;padding:1px 8px">+&nbsp;${esc(aLine)}</div>`;
+          added++;
+        }
+      }
+    }
+
+    const summary = removed === 0 && added === 0
+      ? 'Keine Änderungen'
+      : `−${removed} Zeilen entfernt, +${added} Zeilen hinzugefügt`;
+
+    return `
+      <div class="preview-field">
+        <div class="preview-label">Diff — ${summary}</div>
+        <div class="preview-value content-box" style="padding:4px 0;font-family:'SF Mono','Fira Code',monospace;font-size:12px">
+          ${diffHtml || '<span style="color:var(--text-muted);padding:4px 8px;display:block">Keine Änderungen erkannt.</span>'}
+        </div>
+      </div>`;
+  }
+
+  function field(label, valueHtml, raw = false) {
+    return `
+      <div class="preview-field">
+        <div class="preview-label">${esc(label)}</div>
+        ${raw ? valueHtml : `<div class="preview-value">${valueHtml}</div>`}
+      </div>`;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  MAIN RENDER
+  // ═══════════════════════════════════════════════════════════════
+
+  function render(data) {
+    const app     = document.getElementById('app');
+    const action  = data.action || {};
+    const score   = data.risk_score ?? 0;
+    const bd      = data.score_breakdown || {};
+    const level   = riskLevel(score);
+    const preview = data.preview || null;
+
+    // ── Action metadata badges ───────────────────────────────────
+    const verbBadge  = `<span class="badge badge-verb">${esc(action.verb || '—')}</span>`;
+    const toolBadge  = `<span class="badge badge-tool">${esc(action.tool || '—')}</span>`;
+    const destBadge  = action.destination === 'external'
+      ? `<span class="badge badge-dest">Extern</span>` : '';
+    const contBadge  = action.contaminated
+      ? `<span class="badge badge-contaminated">⚠️ Kontaminiert</span>` : '';
+    const trustBadge = `<span class="badge badge-trust">${esc(action.source_trust || '—')}</span>`;
+    const behaviorBadgeMeta = {
+      BURST_RISK:          { color: '#f97316', icon: '⚡', label: 'BURST_RISK' },
+      NEW_EXTERNAL_TARGET: { color: '#a855f7', icon: '🌐', label: 'NEW_EXTERNAL' },
+    };
+    const behaviorBadges = (action.behavior_flags || []).map(f => {
+      const m = behaviorBadgeMeta[f] || { color: '#7b82b0', icon: '⚑', label: f };
+      return `<span class="badge" style="background:rgba(255,255,255,0.06);border:1px solid ${m.color};color:${m.color}">${m.icon} ${m.label}</span>`;
+    }).join('');
+
+    // ── Score breakdown values ───────────────────────────────────
+    const impact    = bd.impact         ?? '—';
+    const trustMod  = bd.trust_modifier != null ? (bd.trust_modifier >= 0 ? `+${bd.trust_modifier}` : `${bd.trust_modifier}`) : '—';
+    const danger    = bd.danger_sum     ?? '—';
+    const behavior  = bd.behavior_bonus ?? '—';
+
+    // ── Reasons ─────────────────────────────────────────────────
+    const reasons = (data.reasons || []).slice(0, 2);
+    const reasonsHtml = reasons.length
+      ? reasons.map((r, i) => `
+          <div class="reason-item">
+            <div class="reason-num">${i + 1}</div>
+            <div>${esc(r)}</div>
+          </div>`).join('')
+      : '<p style="color:var(--text-muted)">Keine Begründung verfügbar.</p>';
+
+    // ── Rule IDs ────────────────────────────────────────────────
+    const rules = data.matched_rule_ids || [];
+    const rulesHtml = rules.length
+      ? rules.map(r => `<span class="rule-tag">${esc(r)}</span>`).join('')
+      : '<span style="color:var(--text-muted)">Keine Regeln</span>';
+
+    // ── Danger signals ───────────────────────────────────────────
+    const dangerSignals = action.danger_signals || [];
+    const dangerHtml = dangerSignals.length
+      ? `<div class="card">
+          <div class="card-header">🚨 Danger Signals</div>
+          <div class="card-body">
+            <div class="danger-tags">
+              ${dangerSignals.map(s => `<span class="danger-tag">${esc(s)}</span>`).join('')}
+            </div>
+          </div>
+        </div>`
+      : '';
+
+    // ── Timestamp ────────────────────────────────────────────────
+    const ts = action.timestamp ? formatDate(action.timestamp) : '—';
+
+    // ── Build HTML ───────────────────────────────────────────────
+    app.innerHTML = `
+
+      <!-- ① Risk Score -->
+      <div class="card">
+        <div class="card-header">Risiko-Bewertung</div>
+        <div class="card-body">
+          <div class="risk-row">
+            <div class="score-circle" style="border-color:${level.color};color:${level.color}">
+              <div class="score-num">${score}</div>
+              <div class="score-label">${level.label}</div>
+            </div>
+            <div class="risk-details">
+              <h2 style="color:${level.color}">${level.label} Risk</h2>
+              <p>Score ${score}/100 — ${
+                score >= 90 ? 'Kritische Bedrohung erkannt. Ablehnen empfohlen.' :
+                score >= 70 ? 'Hohes Risiko. Sorgfältig prüfen.' :
+                score >= 40 ? 'Mittleres Risiko. Kontext beachten.' :
+                              'Geringes Risiko. Aktion erscheint sicher.'
+              }</p>
+              <div class="breakdown-grid">
+                <div class="breakdown-item">
+                  <div class="val">${impact}</div>
+                  <div class="lbl">Impact</div>
+                </div>
+                <div class="breakdown-item">
+                  <div class="val">${trustMod}</div>
+                  <div class="lbl">Trust Mod</div>
+                </div>
+                <div class="breakdown-item">
+                  <div class="val">${danger}</div>
+                  <div class="lbl">Danger Sum</div>
+                </div>
+                <div class="breakdown-item">
+                  <div class="val">${behavior}</div>
+                  <div class="lbl">Behavior</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ② Action Info -->
+      <div class="card">
+        <div class="card-header">Aktion</div>
+        <div class="card-body">
+          <div class="action-meta">
+            ${verbBadge}${toolBadge}${destBadge}${trustBadge}${contBadge}${behaviorBadges}
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px">Ziel</div>
+            <div class="preview-value monospace">${esc(action.target || '(kein Ziel)')}</div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted)">
+            Session: <span class="monospace">${esc(action.session_id || '—')}</span>
+            &nbsp;·&nbsp;
+            Zeit: ${ts}
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ Reasons -->
+      <div class="card">
+        <div class="card-header">Warum riskant? (Top ${reasons.length})</div>
+        <div class="card-body">
+          ${reasonsHtml}
+        </div>
+      </div>
+
+      <!-- ④ Rules -->
+      <div class="card">
+        <div class="card-header">Ausgelöste Regeln</div>
+        <div class="card-body">
+          <div class="rule-tags">${rulesHtml}</div>
+        </div>
+      </div>
+
+      <!-- ⑤ Danger Signals (nur wenn vorhanden) -->
+      ${dangerHtml}
+
+      <!-- ⑥ Preview -->
+      <div class="card">
+        <div class="card-header">Aktions-Preview</div>
+        <div class="card-body">
+          ${renderPreview(preview, action)}
+        </div>
+      </div>
+
+      <!-- ⑦ Buttons -->
+      <div class="button-row">
+        <button class="btn btn-deny" id="btn-deny" onclick="decide(false)">
+          🛑 Ablehnen
+        </button>
+        <button class="btn btn-approve" id="btn-approve" onclick="decide(true)">
+          ✅ Genehmigen
+        </button>
+      </div>
+
+      <!-- ⑧ Outcome -->
+      <div class="outcome" id="outcome"></div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  DECISION HANDLER
+  // ═══════════════════════════════════════════════════════════════
+
+  function decide(approved) {
+    document.getElementById('btn-approve').disabled = true;
+    document.getElementById('btn-deny').disabled    = true;
+
+    const outcome = document.getElementById('outcome');
+    if (approved) {
+      outcome.className = 'outcome approved';
+      outcome.innerHTML = '✅ Genehmigt<p>Die Aktion wurde freigegeben und wird ausgeführt.</p>';
+    } else {
+      outcome.className = 'outcome denied';
+      outcome.innerHTML = '🛑 Abgelehnt<p>Die Aktion wurde blockiert. Kein Toolcall wird ausgeführt.</p>';
+    }
+    outcome.style.display = 'block';
+    outcome.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    // Communicate decision to parent / server (postMessage + URL fragment)
+    const decision = approved ? 'APPROVE' : 'DENY';
+    window.location.hash = decision;
+    try { window.opener?.postMessage({ immunegate: decision }, '*'); } catch {}
+    try { window.parent?.postMessage({ immunegate: decision }, '*'); } catch {}
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  DATA LOADING
+  //  Priority: 1) URL param ?data=BASE64  2) ?file=path  3) demo
+  // ═══════════════════════════════════════════════════════════════
+
+  function loadData() {
+    const params = new URLSearchParams(window.location.search);
+
+    // Option 1: inline base64 JSON
+    const raw = params.get('data');
+    if (raw) {
+      try {
+        const json = JSON.parse(atob(raw));
+        render(json);
+        return;
+      } catch (e) {
+        console.error('Fehler beim Parsen von ?data=', e);
+      }
+    }
+
+    // Option 2: JSON file via fetch
+    const file = params.get('file');
+    if (file) {
+      fetch(file)
+        .then(r => r.json())
+        .then(render)
+        .catch(e => {
+          document.getElementById('app').innerHTML =
+            `<div class="loading">Fehler beim Laden von "${esc(file)}":<br><code>${esc(String(e))}</code></div>`;
+        });
+      return;
+    }
+
+    // Option 3: Demo data (fallback for development)
+    render(DEMO_DATA);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  DEMO DATA – repräsentiert einen delete/ASK nach Injection
+  // ═══════════════════════════════════════════════════════════════
+  const DEMO_DATA = {
+    "action": {
+      "verb": "delete",
+      "tool": "files",
+      "destination": "internal",
+      "target": "/projects/",
+      "content": "",
+      "sensitivity_label": "unknown",
+      "source_trust": "web",
+      "danger_signals": ["MASS_DESTRUCT", "INJ_OVERRIDE", "STEALTH"],
+      "behavior_flags": ["BURST_RISK"],
+      "contaminated": true,
+      "action_id": "a1b2c3d4-demo",
+      "session_id": "DEMO-001",
+      "timestamp": "2026-03-04T14:00:00"
+    },
+    "decision": "ASK",
+    "risk_score": 100,
+    "score_breakdown": {
+      "impact": 70,
+      "trust_modifier": 20,
+      "danger_sum": 30,
+      "behavior_bonus": 10
+    },
+    "matched_rule_ids": ["PRR-002", "PRR-007"],
+    "reasons": [
+      "[PRR-002] Jede Löschaktion erfordert menschliche Bestätigung",
+      "Danger Signals erkannt: MASS_DESTRUCT, INJ_OVERRIDE, STEALTH"
+    ],
+    "preview": {
+      "type": "delete",
+      "target": "/projects/",
+      "file_count": 6,
+      "warning": "Diese Aktion ist NICHT umkehrbar ohne Backup! Alle Dateien im Verzeichnis werden gelöscht.",
+      "recovery_plan": "Prüfe ob Papierkorb / Snapshot verfügbar. Erstelle vor Ausführung ein Backup.",
+      "files": [
+        {"path": "/projects/report_Q1.pdf",    "size": 245760,  "modified": "2026-02-28T09:12:00"},
+        {"path": "/projects/notes.txt",          "size": 4096,    "modified": "2026-03-01T11:30:00"},
+        {"path": "/projects/data/clients.csv",   "size": 1048576, "modified": "2026-03-03T16:45:00"},
+        {"path": "/projects/src/main.py",        "size": 12288,   "modified": "2026-03-04T08:00:00"},
+        {"path": "/projects/src/utils.py",       "size": 8192,    "modified": "2026-03-04T08:00:00"},
+        {"path": "/projects/config/secrets.env", "size": 512,     "modified": "2026-01-15T10:00:00"}
+      ]
+    }
+  };
+
+  // ── Boot ─────────────────────────────────────────────────────
+  loadData();
+  </script>
+</body>
+</html>

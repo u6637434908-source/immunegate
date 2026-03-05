@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ImmuneGate – Session Scoreboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0f1117;
+      --surface:     #1a1d27;
+      --surface2:    #222537;
+      --border:      #2e3248;
+      --text:        #e8eaf6;
+      --text-muted:  #7b82b0;
+      --allow:       #22c55e;
+      --ask:         #f59e0b;
+      --deny:        #ef4444;
+      --accent:      #6366f1;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+    }
+
+    .main { width: 100%; max-width: 860px; }
+
+    /* ── Header ── */
+    .header {
+      width: 100%; max-width: 860px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 16px;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .header-text h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+    .header-text p  { font-size: 12px; color: var(--text-muted); }
+
+    /* ── Loader Bar ── */
+    .loader-bar {
+      width: 100%; max-width: 860px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .loader-status {
+      font-size: 12px; color: var(--text-muted);
+      flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .btn-load {
+      padding: 6px 14px;
+      background: rgba(99,102,241,0.15);
+      border: 1px solid rgba(99,102,241,0.4);
+      border-radius: 6px;
+      color: #a5b4fc;
+      font-size: 12px; font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-load:hover { opacity: 0.8; }
+
+    /* ── Card ── */
+    .card {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .card-body { padding: 16px; }
+
+    /* ── KPI Grid ── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .kpi-tile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .kpi-icon  { font-size: 20px; margin-bottom: 8px; }
+    .kpi-value { font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+    .kpi-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .kpi-sub   { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+    /* ── Charts Row ── */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    /* ── Donut ── */
+    .donut-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 20px;
+    }
+    .donut-legend { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+    .legend-row   { display: flex; align-items: center; gap: 8px; }
+    .legend-dot   { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-label { font-size: 12px; font-weight: 600; }
+    .legend-bar   {
+      flex: 1; height: 4px; background: var(--surface2);
+      border-radius: 2px; overflow: hidden;
+    }
+    .legend-bar-fill { height: 100%; border-radius: 2px; }
+    .legend-count { font-size: 13px; font-weight: 700; min-width: 20px; text-align: right; }
+    .legend-pct   { font-size: 11px; color: var(--text-muted); min-width: 36px; text-align: right; }
+
+    /* ── Rule Bars ── */
+    .rule-list { display: flex; flex-direction: column; gap: 18px; }
+    .rule-item-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .rule-id {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px; color: #a5b4fc;
+    }
+    .rule-count { font-size: 13px; font-weight: 700; }
+    .rule-track {
+      height: 8px; background: var(--surface2);
+      border-radius: 4px; overflow: hidden;
+    }
+    .rule-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    }
+    .rule-empty {
+      padding: 16px 0;
+      color: var(--text-muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    /* ── Timeline ── */
+    .tl { display: flex; flex-direction: column; }
+    .tl-event {
+      display: flex; gap: 12px;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .tl-event:last-child { border-bottom: none; padding-bottom: 0; }
+    .tl-icon {
+      width: 30px; height: 30px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; flex-shrink: 0; margin-top: 1px;
+    }
+    .tl-body { flex: 1; min-width: 0; }
+    .tl-head {
+      display: flex; align-items: center; gap: 6px;
+      flex-wrap: wrap; margin-bottom: 2px;
+    }
+    .tl-ts { font-size: 11px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+    .tl-detail {
+      font-size: 12px; color: var(--text-muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* ── Badges ── */
+    .badge {
+      padding: 2px 7px; border-radius: 4px;
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+    .badge-allow { background: rgba(34,197,94,0.15);  color: #22c55e; }
+    .badge-ask   { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .badge-deny  { background: rgba(239,68,68,0.15);  color: #ef4444; }
+    .badge-info  { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+
+    /* ── Monospace ── */
+    .mono { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 12px; }
+
+    /* ── Session footer ── */
+    .session-footer {
+      width: 100%; max-width: 860px;
+      font-size: 11px; color: var(--text-muted);
+      text-align: center; margin-top: 8px;
+    }
+
+    /* ── Empty / Loading ── */
+    .empty { text-align: center; color: var(--text-muted); padding: 32px; }
+
+    /* ── Export controls ── */
+    .btn-export {
+      padding: 6px 14px;
+      background: rgba(34,197,94,0.15);
+      border: 1px solid rgba(34,197,94,0.4);
+      border-radius: 6px;
+      color: #22c55e;
+      font-size: 12px; font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-export:hover { opacity: 0.8; }
+    .redact-label {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 12px; color: var(--text-muted);
+      cursor: pointer; white-space: nowrap;
+      user-select: none;
+    }
+    .redact-label input { cursor: pointer; accent-color: #f59e0b; }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .kpi-grid    { grid-template-columns: repeat(2, 1fr); }
+      .charts-row  { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">🛡️</div>
+      <div class="header-text">
+        <h1>ImmuneGate</h1>
+        <p>Security &amp; Trust Layer — Session Scoreboard</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- File Loader -->
+  <div class="loader-bar">
+    <span class="loader-status" id="loader-status">
+      Demo-Daten — lade echten Audit-Log via Datei-Picker oder <code>?file=URL</code>
+    </span>
+    <button class="btn-load" onclick="document.getElementById('file-input').click()">
+      📂 Audit-Log laden
+    </button>
+    <input type="file" id="file-input" accept=".json" style="display:none" onchange="handleFileLoad(event)">
+    <label class="redact-label" title="E-Mail-Adressen im Report schwärzen">
+      <input type="checkbox" id="redact-toggle"> 🔒 PII schwärzen
+    </label>
+    <button class="btn-export" onclick="exportPDF()">📄 PDF Export</button>
+  </div>
+
+  <!-- App -->
+  <div class="main" id="app">
+    <div class="empty">Lade Daten…</div>
+  </div>
+
+  <!-- Session footer -->
+  <div class="session-footer" id="session-footer"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function pct(n, total) {
+  return total > 0 ? Math.round(n / total * 100) : 0;
+}
+
+function formatTs(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleTimeString('de-DE', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  } catch { return iso; }
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('de-DE', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    });
+  } catch { return iso; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DONUT CHART (pure SVG)
+// ═══════════════════════════════════════════════════════════════
+
+function buildDonut(allow, ask, deny) {
+  const total = allow + ask + deny;
+  const W = 148, cx = 74, cy = 74, r = 52;
+  const C = 2 * Math.PI * r;
+
+  const aLen = total > 0 ? (allow / total) * C : 0;
+  const sLen = total > 0 ? (ask   / total) * C : 0;
+  const dLen = total > 0 ? (deny  / total) * C : 0;
+
+  const gap = (total > 1 && [allow, ask, deny].filter(v => v > 0).length > 1)
+    ? Math.min(4, C * 0.012) : 0;
+
+  function shrink(len) { return len > 0 ? Math.max(0, len - gap) : 0; }
+
+  function seg(len, color, offset) {
+    if (len < 0.5) return '';
+    return `<circle cx="${cx}" cy="${cy}" r="${r}"
+      fill="none" stroke="${color}" stroke-width="16"
+      stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}"
+      stroke-dashoffset="${(-offset).toFixed(2)}"
+      transform="rotate(-90 ${cx} ${cy})"
+    />`;
+  }
+
+  const bg   = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#2e3248" stroke-width="16"/>`;
+  const segs = [
+    seg(shrink(aLen), '#22c55e', 0),
+    seg(shrink(sLen), '#f59e0b', aLen),
+    seg(shrink(dLen), '#ef4444', aLen + sLen),
+  ].join('');
+
+  const label = total === 0 ? '—' : String(total);
+  const center = `
+    <text x="${cx}" y="${cy - 5}" text-anchor="middle"
+      fill="#e8eaf6" font-size="22" font-weight="800"
+      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">${label}</text>
+    <text x="${cx}" y="${cy + 13}" text-anchor="middle"
+      fill="#7b82b0" font-size="9" letter-spacing="1"
+      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">AKTIONEN</text>`;
+
+  return `<svg width="${W}" height="${W}" viewBox="0 0 ${W} ${W}">${bg}${segs}${center}</svg>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TIMELINE
+// ═══════════════════════════════════════════════════════════════
+
+function eventMeta(e) {
+  const p  = e.payload || {};
+  const et = e.event_type;
+
+  if (et === 'risk_evaluated') {
+    const d   = (p.decision || '').toLowerCase();
+    const map = {
+      allow: { bg: 'rgba(34,197,94,0.15)',  color: '#22c55e', icon: '✅', cls: 'badge-allow' },
+      ask:   { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', icon: '⚠️', cls: 'badge-ask'   },
+      deny:  { bg: 'rgba(239,68,68,0.15)',  color: '#ef4444', icon: '🛑', cls: 'badge-deny'  },
+    };
+    const m   = map[d] || { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc', icon: '⚑', cls: 'badge-info' };
+    const ruleTags = (p.matched_rule_ids || [])
+      .map(r => `<span class="badge badge-info" style="font-size:9px">${esc(r)}</span>`)
+      .join(' ');
+    const score = p.risk_score != null ? `Score ${p.risk_score}` : '';
+    const contamTag = p.contaminated ? ' · <span style="color:#f97316;font-size:11px">⚠️ kontaminiert</span>' : '';
+    return {
+      iconBg: m.bg, iconColor: m.color, icon: m.icon,
+      title:  `<span class="badge ${m.cls}">${d.toUpperCase()}</span>
+               <span class="mono">${esc(p.verb || '')} → ${esc(p.target || '(kein Ziel)')}</span>`,
+      detail: [score, ruleTags].filter(Boolean).join(' · ') + contamTag,
+    };
+  }
+
+  if (et === 'input_received') {
+    const sigs = (p.danger_signals || []);
+    const sigStr = sigs.length
+      ? sigs.map(s => `<span class="badge badge-deny" style="font-size:9px">${esc(s)}</span>`).join(' ')
+      : `Hash: <span class="mono">${esc(p.content_hash || '—')}</span>`;
+    return {
+      iconBg: 'rgba(99,102,241,0.15)', iconColor: '#a5b4fc', icon: '📧',
+      title:  `<span class="badge badge-info">INPUT</span> Externe Eingabe (${esc(p.source_kind || '—')})`,
+      detail: sigStr,
+    };
+  }
+
+  if (et === 'tool_call') {
+    const ok = p.success;
+    return {
+      iconBg:    ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+      iconColor: ok ? '#22c55e' : '#ef4444',
+      icon:      ok ? '🔧' : '⛔',
+      title:  `<span class="badge ${ok ? 'badge-allow' : 'badge-deny'}">${ok ? 'EXEC' : 'BLOCKED'}</span>
+               Tool: <span class="mono">${esc(p.tool || '—')}</span>`,
+      detail: esc(p.result_summary || ''),
+    };
+  }
+
+  if (et === 'human_decision') {
+    const ok = p.choice === 'approve';
+    return {
+      iconBg: 'rgba(168,85,247,0.15)', iconColor: '#d8b4fe', icon: '👤',
+      title:  `<span class="badge" style="background:rgba(168,85,247,0.2);color:#d8b4fe">HUMAN</span>
+               ${ok ? 'Genehmigt' : (p.choice === 'auto_deny' ? 'Auto-DENY' : 'Abgelehnt')}`,
+      detail: p.choice === 'auto_deny' ? 'Non-interactive Modus' : '',
+    };
+  }
+
+  if (et === 'gate_prompt') {
+    return {
+      iconBg: 'rgba(245,158,11,0.12)', iconColor: '#f59e0b', icon: '🔔',
+      title:  `<span class="badge badge-ask">ASK</span> Approval UI angezeigt`,
+      detail: `Aktion-ID: <span class="mono">${esc(p.action_id || '—')}</span>`,
+    };
+  }
+
+  return {
+    iconBg: 'rgba(123,130,176,0.12)', iconColor: '#7b82b0', icon: '●',
+    title:  `<span class="badge badge-info">${esc(et)}</span>`,
+    detail: '',
+  };
+}
+
+function buildTimeline(events) {
+  const maxShow = 20;
+  const visible = [...events].reverse().slice(0, maxShow);
+
+  if (!visible.length) {
+    return '<div class="empty">Keine Events in diesem Log.</div>';
+  }
+
+  return visible.map(e => {
+    const m = eventMeta(e);
+    return `
+      <div class="tl-event">
+        <div class="tl-icon" style="background:${m.iconBg};color:${m.iconColor}">${m.icon}</div>
+        <div class="tl-body">
+          <div class="tl-head">
+            ${m.title}
+            <span class="tl-ts">${formatTs(e.timestamp)}</span>
+          </div>
+          ${m.detail ? `<div class="tl-detail">${m.detail}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  KPI TILE
+// ═══════════════════════════════════════════════════════════════
+
+function kpiTile(icon, value, label, sub, color) {
+  return `
+    <div class="kpi-tile">
+      <div class="kpi-icon">${icon}</div>
+      <div class="kpi-value" style="color:${color}">${esc(value)}</div>
+      <div class="kpi-label">${esc(label)}</div>
+      ${sub ? `<div class="kpi-sub">${esc(sub)}</div>` : ''}
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MAIN RENDER
+// ═══════════════════════════════════════════════════════════════
+
+let currentData = null;
+
+function render(auditLog) {
+  currentData = auditLog;
+  const s    = auditLog.session_summary || {};
+  const evs  = auditLog.events || [];
+
+  const allow = s.allow_count ?? 0;
+  const ask   = s.ask_count   ?? 0;
+  const deny  = s.deny_count  ?? 0;
+  const total = s.total_actions ?? (allow + ask + deny);
+
+  const denyRate      = s.deny_rate               ?? 0;
+  const approvalRate  = s.approval_rate            ?? 0;
+  const untrustedRate = s.untrusted_influence_rate ?? 0;
+  const topRules      = s.top_rules || [];
+
+  // ── KPI ────────────────────────────────────────────────────
+  const denyColor     = deny  > 0 ? '#ef4444' : '#22c55e';
+  const untrustedColor = untrustedRate > 50 ? '#f97316'
+                       : untrustedRate > 20 ? '#f59e0b' : '#22c55e';
+  const kpiHtml = `
+    <div class="kpi-grid">
+      ${kpiTile('📊', String(total), 'Aktionen gesamt', `${allow} allow · ${ask} ask · ${deny} deny`, '#e8eaf6')}
+      ${kpiTile('🛑', denyRate.toFixed(1) + '%', 'Deny Rate',
+          `${deny} von ${total} geblockt`, denyColor)}
+      ${kpiTile('⚠️', untrustedRate.toFixed(1) + '%', 'Untrusted Influence',
+          'unter Fremdeinfluss', untrustedColor)}
+      ${kpiTile('👤',
+          ask > 0 ? approvalRate.toFixed(1) + '%' : '—',
+          'Approval Rate',
+          ask > 0 ? `${s.approve_count ?? 0} von ${ask} ASK genehmigt` : 'Keine ASK-Aktionen',
+          ask > 0 ? '#22c55e' : '#7b82b0')}
+    </div>`;
+
+  // ── Donut + Legend ─────────────────────────────────────────
+  const legendItems = [
+    { color: '#22c55e', label: 'ALLOW', count: allow },
+    { color: '#f59e0b', label: 'ASK',   count: ask   },
+    { color: '#ef4444', label: 'DENY',  count: deny  },
+  ];
+  const legendHtml = legendItems.map(l => {
+    const p = pct(l.count, total);
+    return `
+      <div class="legend-row">
+        <div class="legend-dot" style="background:${l.color}"></div>
+        <span class="legend-label" style="color:${l.color};min-width:44px">${l.label}</span>
+        <div class="legend-bar">
+          <div class="legend-bar-fill" style="width:${p}%;background:${l.color}"></div>
+        </div>
+        <span class="legend-count" style="color:${l.count > 0 ? l.color : 'var(--text-muted)'}">${l.count}</span>
+        <span class="legend-pct">${p}%</span>
+      </div>`;
+  }).join('');
+
+  // ── Rule Bars ──────────────────────────────────────────────
+  const maxCount   = topRules.length > 0 ? topRules[0].count : 1;
+  const rulePalette = [
+    'linear-gradient(90deg,#6366f1,#a855f7)',
+    'linear-gradient(90deg,#4f46e5,#7c3aed)',
+    'linear-gradient(90deg,#3730a3,#5b21b6)',
+  ];
+  const medals = ['🥇', '🥈', '🥉'];
+
+  const ruleHtml = topRules.length > 0
+    ? topRules.map((rule, i) => {
+        const fillPct = Math.round(rule.count / maxCount * 100);
+        return `
+          <div>
+            <div class="rule-item-header">
+              <span class="rule-id">${medals[i] || ''} ${esc(rule.rule_id)}</span>
+              <span class="rule-count">${rule.count}×</span>
+            </div>
+            <div class="rule-track">
+              <div class="rule-fill" style="width:${fillPct}%;background:${rulePalette[i] || rulePalette[2]}"></div>
+            </div>
+          </div>`;
+      }).join('')
+    : '<div class="rule-empty">Keine Regel-Daten.</div>';
+
+  // ── Timeline header ────────────────────────────────────────
+  const tlShown = Math.min(evs.length, 20);
+
+  // ── Assemble ───────────────────────────────────────────────
+  document.getElementById('app').innerHTML = `
+    ${kpiHtml}
+
+    <div class="charts-row">
+      <!-- Donut -->
+      <div class="card">
+        <div class="card-header">Entscheidungs-Verteilung</div>
+        <div class="card-body donut-wrap">
+          ${buildDonut(allow, ask, deny)}
+          <div class="donut-legend">${legendHtml}</div>
+        </div>
+      </div>
+
+      <!-- Rule Bars -->
+      <div class="card">
+        <div class="card-header">Top 3 ausgelöste Regeln</div>
+        <div class="card-body">
+          <div class="rule-list">${ruleHtml}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="card">
+      <div class="card-header">
+        Timeline — letzte ${tlShown} Events
+        <span style="margin-left:6px;font-size:10px;color:var(--text-muted);">(${evs.length} gesamt, neueste zuerst)</span>
+      </div>
+      <div class="card-body">
+        <div class="tl">${buildTimeline(evs)}</div>
+      </div>
+    </div>`;
+
+  // ── Footer ─────────────────────────────────────────────────
+  document.getElementById('session-footer').innerHTML =
+    `Session: <span class="mono">${esc(auditLog.session_id || s.session_id || '—')}</span>
+     &nbsp;·&nbsp; Policy v${esc(auditLog.policy_version || '1.0')}
+     &nbsp;·&nbsp; Exportiert: ${formatDate(auditLog.exported_at)}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FILE LOADING
+// ═══════════════════════════════════════════════════════════════
+
+function handleFileLoad(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      document.getElementById('loader-status').textContent =
+        `✅ ${file.name}  ·  ${(file.size / 1024).toFixed(1)} KB  ·  ${(data.events || []).length} Events`;
+      render(data);
+    } catch (err) {
+      document.getElementById('loader-status').textContent = `❌ Fehler: ${err.message}`;
+    }
+  };
+  reader.readAsText(file);
+  evt.target.value = '';
+}
+
+function loadData() {
+  const params = new URLSearchParams(window.location.search);
+
+  const raw = params.get('data');
+  if (raw) {
+    try { render(JSON.parse(atob(raw))); return; } catch {}
+  }
+
+  const file = params.get('file');
+  if (file) {
+    fetch(file)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('loader-status').textContent =
+          `✅ ${file}  ·  ${(data.events || []).length} Events`;
+        render(data);
+      })
+      .catch(e => {
+        document.getElementById('loader-status').textContent = `❌ ${e.message} — Demo-Daten geladen`;
+        render(DEMO_DATA);
+      });
+    return;
+  }
+
+  render(DEMO_DATA);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PDF EXPORT
+// ═══════════════════════════════════════════════════════════════
+
+function redactTarget(str) {
+  if (!str) return str;
+  // Emails: keep domain, redact user → [GESCHWÄRZT]@domain.com
+  return str.replace(/([A-Za-z0-9._%+\-]+)(@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})/gi,
+    '[GESCHWÄRZT]$2');
+}
+
+function redactData(data) {
+  const clone = JSON.parse(JSON.stringify(data));
+  for (const ev of clone.events || []) {
+    if (ev.event_type === 'risk_evaluated' && ev.payload?.target) {
+      ev.payload.target = redactTarget(ev.payload.target);
+    }
+  }
+  return clone;
+}
+
+function exportPDF() {
+  const data = currentData || DEMO_DATA;
+  const redact = document.getElementById('redact-toggle')?.checked ?? false;
+  const html = generateReportHTML(data, redact);
+  const w = window.open('', '_blank');
+  if (!w) {
+    alert('Popup blockiert! Bitte Popup-Blocker für diese Seite deaktivieren.');
+    return;
+  }
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => { try { w.focus(); w.print(); } catch(e) {} }, 500);
+}
+
+function generateReportHTML(data, redact) {
+  const processed   = redact ? redactData(data) : data;
+  const s           = processed.session_summary || {};
+  const evs         = processed.events || [];
+  const riskEvents  = evs.filter(e => e.event_type === 'risk_evaluated');
+  const inputEvents = evs.filter(e => e.event_type === 'input_received');
+
+  const allow      = s.allow_count  ?? 0;
+  const ask        = s.ask_count    ?? 0;
+  const deny       = s.deny_count   ?? 0;
+  const total      = s.total_actions ?? (allow + ask + deny);
+  const sessionId  = processed.session_id || '—';
+  const policyVer  = processed.policy_version || '1.0';
+  const exportedAt = formatDate(processed.exported_at || new Date().toISOString());
+
+  // ── Helpers (used during generation, run in scoreboard scope) ──
+  function scoreColor(score) {
+    if (score >= 90) return '#dc2626';
+    if (score >= 70) return '#ea580c';
+    if (score >= 40) return '#d97706';
+    return '#16a34a';
+  }
+
+  function decBadge(decision) {
+    const d = (decision || '').toLowerCase();
+    const map = {
+      allow: 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0',
+      ask:   'background:#fef9c3;color:#854d0e;border:1px solid #fde68a',
+      deny:  'background:#fee2e2;color:#991b1b;border:1px solid #fecaca',
+    };
+    const s2 = map[d] || 'background:#f3f4f6;color:#374151;border:1px solid #e5e7eb';
+    return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;${s2}">${esc(decision || '—')}</span>`;
+  }
+
+  // ── Timeline rows ──
+  const timelineRows = riskEvents.map(e => {
+    const p      = e.payload || {};
+    const sc     = p.risk_score ?? '—';
+    const rules  = (p.matched_rule_ids || []).join(', ');
+    const reason = ((p.reasons || [])[0] || '').replace(/^\[.*?\]\s*/, '') || '—';
+    const contBg = p.contaminated ? 'background:#fef9c3' : '';
+    return `<tr style="${contBg}">
+      <td style="white-space:nowrap;color:#6b7280;font-size:11px">${esc(formatTs(e.timestamp))}</td>
+      <td><code style="font-size:11px;background:#f3f4f6;padding:1px 5px;border-radius:3px">${esc(p.verb || '—')}</code></td>
+      <td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.target || '')}">${esc(p.target || '—')}</td>
+      <td>${decBadge(p.decision)}</td>
+      <td style="font-weight:700;color:${scoreColor(sc)};text-align:right;font-size:12px">${esc(String(sc))}</td>
+      <td style="font-size:10px;color:#6b7280"><code>${esc(rules)}</code></td>
+      <td style="font-size:11px;color:#374151">${esc(reason)}</td>
+    </tr>`;
+  }).join('');
+
+  // ── Danger signal rows ──
+  const dangerRows = inputEvents
+    .filter(e => (e.payload?.danger_signals || []).length > 0)
+    .map(e => {
+      const p = e.payload;
+      return `<tr>
+        <td style="white-space:nowrap;color:#6b7280;font-size:11px">${esc(formatTs(e.timestamp))}</td>
+        <td style="font-size:11px">${esc(p.source_kind || '—')}</td>
+        <td style="font-size:11px;font-weight:600;color:#dc2626">${esc((p.danger_signals || []).join(', '))}</td>
+        <td style="font-family:monospace;font-size:11px;color:#9ca3af">${esc(p.content_hash || '—')}</td>
+      </tr>`;
+    }).join('');
+
+  // ── Top rule rows ──
+  const medals = ['🥇','🥈','🥉'];
+  const ruleRows = (s.top_rules || []).map((r, i) =>
+    `<tr>
+      <td style="width:28px">${medals[i] || ''}</td>
+      <td><code style="font-size:12px;background:#ede9fe;color:#5b21b6;padding:2px 7px;border-radius:4px">${esc(r.rule_id)}</code></td>
+      <td style="font-weight:700;text-align:right">${r.count}×</td>
+    </tr>`
+  ).join('');
+
+  const sectionNum = dangerRows ? n => ['01','02','03','04','05'][n] : n => ['01','02','03','04'][n];
+  const redactNote = redact
+    ? `<span style="display:inline-block;background:#fef9c3;color:#92400e;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;margin-top:8px">🔒 PII geschwärzt</span>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>ImmuneGate Incident Report – ${esc(sessionId)}</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif;
+  font-size: 13px; line-height: 1.5; color: #1a1a2e; background: white;
+}
+.cover {
+  background: #0f1117; color: white;
+  padding: 40px 52px 36px;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+}
+.cover-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.cover-logo-icon {
+  width: 44px; height: 44px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; font-size: 22px;
+}
+.cover-logo h1 { font-size: 20px; font-weight: 800; letter-spacing: -.3px; }
+.cover-logo p  { font-size: 11px; color: #7b82b0; margin-top: 1px; }
+.report-title { font-size: 28px; font-weight: 300; color: #e8eaf6; letter-spacing: -.5px; margin-bottom: 6px; }
+.report-sub   { font-size: 13px; color: #9ca3af; }
+.cover-right  { text-align: right; flex-shrink: 0; }
+.meta-row     { font-size: 11px; color: #9ca3af; margin-bottom: 5px; }
+.meta-row strong { color: #e8eaf6; font-weight: 600; }
+.classify {
+  display: inline-block; margin-top: 14px;
+  padding: 4px 12px; border: 1px solid rgba(239,68,68,.4);
+  border-radius: 4px; color: #fca5a5;
+  font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+}
+.section        { padding: 24px 52px; border-bottom: 1px solid #e5e7eb; }
+.section:last-of-type { border-bottom: none; }
+.sec-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px;
+  color: #9ca3af; margin-bottom: 16px; padding-bottom: 8px;
+  border-bottom: 2px solid #e5e7eb;
+}
+.metrics-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+.metric-box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; }
+.metric-val { font-size: 24px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+.metric-lbl { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: .5px; }
+.metric-sub { font-size: 11px; color: #9ca3af; margin-top: 3px; }
+table { width: 100%; border-collapse: collapse; }
+th {
+  background: #f9fafb; padding: 8px 10px;
+  text-align: left; font-size: 10px; color: #6b7280;
+  text-transform: uppercase; letter-spacing: .5px; font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+}
+td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+.footer {
+  background: #f9fafb; border-top: 1px solid #e5e7eb;
+  padding: 14px 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; color: #9ca3af;
+}
+/* ── Screen: print bar ── */
+.print-bar {
+  background: #1a1d27; padding: 10px 52px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.print-btn {
+  padding: 7px 18px;
+  background: rgba(34,197,94,.15); border: 1px solid rgba(34,197,94,.4);
+  border-radius: 6px; color: #22c55e; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.print-note { font-size: 12px; color: #7b82b0; }
+@media print {
+  @page { size: A4; margin: 1.2cm 1.5cm; }
+  body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .print-bar { display: none !important; }
+  .page-break { page-break-before: always; }
+  .section { page-break-inside: avoid; }
+  tr { page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<div class="print-bar">
+  <span class="print-note">📄 Drucken → Als PDF speichern — oder Browser-Druckdialog nutzen</span>
+  <button class="print-btn" onclick="window.print()">🖨️ PDF speichern</button>
+</div>
+
+<!-- ── Cover ── -->
+<div class="cover">
+  <div>
+    <div class="cover-logo">
+      <div class="cover-logo-icon">🛡️</div>
+      <div>
+        <h1>ImmuneGate</h1>
+        <p>Security &amp; Trust Layer</p>
+      </div>
+    </div>
+    <div class="report-title">Security Incident Report</div>
+    <div class="report-sub">Agent Activity Audit · Automatisch generiert</div>
+  </div>
+  <div class="cover-right">
+    <div class="meta-row">Session-ID &nbsp;<strong>${esc(sessionId)}</strong></div>
+    <div class="meta-row">Policy-Version &nbsp;<strong>v${esc(policyVer)}</strong></div>
+    <div class="meta-row">Exportiert &nbsp;<strong>${esc(exportedAt)}</strong></div>
+    <div class="classify">VERTRAULICH</div>
+    ${redactNote}
+  </div>
+</div>
+
+<!-- ── 01 Executive Summary ── -->
+<div class="section">
+  <div class="sec-title">${sectionNum(0)} &nbsp; Executive Summary</div>
+  <div class="metrics-row">
+    <div class="metric-box">
+      <div class="metric-val" style="color:#1a1a2e">${total}</div>
+      <div class="metric-lbl">Aktionen gesamt</div>
+      <div class="metric-sub">${allow} allow &middot; ${ask} ask &middot; ${deny} deny</div>
+    </div>
+    <div class="metric-box" style="border-color:${deny > 0 ? '#fecaca' : '#bbf7d0'}">
+      <div class="metric-val" style="color:${deny > 0 ? '#dc2626' : '#16a34a'}">${(s.deny_rate ?? 0).toFixed(1)}%</div>
+      <div class="metric-lbl">Deny Rate</div>
+      <div class="metric-sub">${deny} von ${total} geblockt</div>
+    </div>
+    <div class="metric-box" style="border-color:${(s.untrusted_influence_rate ?? 0) > 50 ? '#fed7aa' : '#e5e7eb'}">
+      <div class="metric-val" style="color:${(s.untrusted_influence_rate ?? 0) > 50 ? '#ea580c' : '#d97706'}">${(s.untrusted_influence_rate ?? 0).toFixed(1)}%</div>
+      <div class="metric-lbl">Untrusted Influence</div>
+      <div class="metric-sub">Aktionen unter Fremdeinfluss</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-val" style="color:#6366f1">${ask > 0 ? (s.approval_rate ?? 0).toFixed(1) + '%' : '&mdash;'}</div>
+      <div class="metric-lbl">Approval Rate</div>
+      <div class="metric-sub">${ask > 0 ? `${s.approve_count ?? 0} von ${ask} genehmigt` : 'Keine ASK-Aktionen'}</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 02 Entscheidungs-Timeline ── -->
+<div class="section page-break">
+  <div class="sec-title">${sectionNum(1)} &nbsp; Entscheidungs-Timeline</div>
+  ${riskEvents.length > 0 ? `
+  <table>
+    <thead><tr>
+      <th>Zeit</th><th>Aktion</th><th>Ziel</th>
+      <th>Entscheidung</th><th style="text-align:right">Score</th>
+      <th>Regeln</th><th>Begründung</th>
+    </tr></thead>
+    <tbody>${timelineRows}</tbody>
+  </table>
+  <p style="font-size:10px;color:#9ca3af;margin-top:10px">* Gelb hinterlegt = kontaminierte Session</p>
+  ` : '<p style="color:#9ca3af;padding:12px 0">Keine Entscheidungs-Events.</p>'}
+</div>
+
+<!-- ── 03 Danger Signals (if any) ── -->
+${dangerRows ? `
+<div class="section">
+  <div class="sec-title">${sectionNum(2)} &nbsp; Erkannte Danger Signals</div>
+  <table>
+    <thead><tr><th>Zeit</th><th>Quelle</th><th>Signale</th><th>Content-Hash</th></tr></thead>
+    <tbody>${dangerRows}</tbody>
+  </table>
+</div>` : ''}
+
+<!-- ── Top Regeln ── -->
+<div class="section">
+  <div class="sec-title">${sectionNum(dangerRows ? 3 : 2)} &nbsp; Top ausgelöste Regeln</div>
+  ${(s.top_rules || []).length > 0 ? `
+  <table style="max-width:400px">
+    <thead><tr><th>#</th><th>Regel-ID</th><th style="text-align:right">Häufigkeit</th></tr></thead>
+    <tbody>${ruleRows}</tbody>
+  </table>` : '<p style="color:#9ca3af;padding:12px 0">Keine Regel-Daten.</p>'}
+</div>
+
+<!-- ── Session Metriken ── -->
+<div class="section">
+  <div class="sec-title">${sectionNum(dangerRows ? 4 : 3)} &nbsp; Session Metriken</div>
+  <table style="max-width:440px">
+    <tbody>
+      <tr><td style="color:#6b7280;width:180px">Session-ID</td><td><code>${esc(sessionId)}</code></td></tr>
+      <tr><td style="color:#6b7280">Policy Version</td><td>v${esc(policyVer)}</td></tr>
+      <tr><td style="color:#6b7280">Exportiert</td><td>${esc(exportedAt)}</td></tr>
+      <tr><td style="color:#6b7280">Aktionen gesamt</td><td><strong>${total}</strong></td></tr>
+      <tr><td style="color:#6b7280">ALLOW</td><td style="color:#16a34a;font-weight:600">${allow}</td></tr>
+      <tr><td style="color:#6b7280">ASK</td><td style="color:#d97706;font-weight:600">${ask}</td></tr>
+      <tr><td style="color:#6b7280">DENY</td><td style="color:#dc2626;font-weight:600">${deny}</td></tr>
+      <tr><td style="color:#6b7280">Deny Rate</td><td>${(s.deny_rate ?? 0).toFixed(1)}%</td></tr>
+      <tr><td style="color:#6b7280">Approval Rate</td><td>${ask > 0 ? (s.approval_rate ?? 0).toFixed(1) + '%' : '—'}</td></tr>
+      <tr><td style="color:#6b7280">Untrusted Influence Rate</td><td>${(s.untrusted_influence_rate ?? 0).toFixed(1)}%</td></tr>
+      <tr><td style="color:#6b7280">PII geschwärzt</td><td>${redact ? '<strong style="color:#d97706">Ja</strong>' : 'Nein'}</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ── Footer ── -->
+<div class="footer">
+  <span>🛡️ ImmuneGate Security &amp; Trust Layer &middot; Policy v${esc(policyVer)}</span>
+  <span>VERTRAULICH &middot; Nicht für externe Weitergabe bestimmt</span>
+</div>
+
+</body>
+</html>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DEMO DATA  (mirrors actual output of python3 demo.py)
+// ═══════════════════════════════════════════════════════════════
+
+const DEMO_DATA = {
+  "session_id": "DEMO-001",
+  "exported_at": "2026-03-05T09:00:00",
+  "policy_version": "1.0",
+  "events": [
+    {
+      "event_id": "e001", "session_id": "DEMO-001",
+      "event_type": "risk_evaluated", "timestamp": "2026-03-05T09:00:01.1",
+      "payload": {
+        "verb": "read", "tool": "files", "target": "/projects/report.pdf",
+        "decision": "ALLOW", "risk_score": 10,
+        "score_breakdown": {"impact":20,"trust_modifier":-10,"danger_sum":0,"behavior_bonus":0,"total":10},
+        "matched_rule_ids": ["PRR-005"],
+        "reasons": ["[PRR-005] Lesen und Browsen ist risikoarm"],
+        "danger_signals": [], "contaminated": false, "error": ""
+      }
+    },
+    {
+      "event_id": "e002", "session_id": "DEMO-001",
+      "event_type": "tool_call", "timestamp": "2026-03-05T09:00:01.2",
+      "payload": { "tool": "files", "result_summary": "Ausgeführt: read → /projects/report.pdf", "success": true }
+    },
+    {
+      "event_id": "e003", "session_id": "DEMO-001",
+      "event_type": "risk_evaluated", "timestamp": "2026-03-05T09:00:02.1",
+      "payload": {
+        "verb": "read", "tool": "files", "target": "/projects/notes.txt",
+        "decision": "ALLOW", "risk_score": 10,
+        "score_breakdown": {"impact":20,"trust_modifier":-10,"danger_sum":0,"behavior_bonus":0,"total":10},
+        "matched_rule_ids": ["PRR-005"],
+        "reasons": ["[PRR-005] Lesen und Browsen ist risikoarm"],
+        "danger_signals": [], "contaminated": false, "error": ""
+      }
+    },
+    {
+      "event_id": "e004", "session_id": "DEMO-001",
+      "event_type": "tool_call", "timestamp": "2026-03-05T09:00:02.2",
+      "payload": { "tool": "files", "result_summary": "Ausgeführt: read → /projects/notes.txt", "success": true }
+    },
+    {
+      "event_id": "e005", "session_id": "DEMO-001",
+      "event_type": "risk_evaluated", "timestamp": "2026-03-05T09:00:03.1",
+      "payload": {
+        "verb": "browse", "tool": "web", "target": "https://docs.python.org",
+        "decision": "ALLOW", "risk_score": 10,
+        "score_breakdown": {"impact":10,"trust_modifier":0,"danger_sum":0,"behavior_bonus":0,"total":10},
+        "matched_rule_ids": ["PRR-005"],
+        "reasons": ["[PRR-005] Lesen und Browsen ist risikoarm"],
+        "danger_signals": [], "contaminated": false, "error": ""
+      }
+    },
+    {
+      "event_id": "e006", "session_id": "DEMO-001",
+      "event_type": "tool_call", "timestamp": "2026-03-05T09:00:03.2",
+      "payload": { "tool": "web", "result_summary": "Ausgeführt: browse → https://docs.python.org", "success": true }
+    },
+    {
+      "event_id": "e007", "session_id": "DEMO-001",
+      "event_type": "input_received", "timestamp": "2026-03-05T09:00:05.0",
+      "payload": {
+        "source_kind": "email_external",
+        "trust_modifier": 20,
+        "danger_signals": ["INJ_OVERRIDE", "MASS_DESTRUCT", "STEALTH"],
+        "content_hash": "d4e5f6a7b8c9dd01"
+      }
+    },
+    {
+      "event_id": "e008", "session_id": "DEMO-001",
+      "event_type": "risk_evaluated", "timestamp": "2026-03-05T09:00:06.1",
+      "payload": {
+        "verb": "delete", "tool": "files", "target": "/projects/",
+        "decision": "DENY", "risk_score": 100,
+        "score_breakdown": {"impact":85,"trust_modifier":25,"danger_sum":85,"behavior_bonus":0,"total":100},
+        "matched_rule_ids": ["PRR-007"],
+        "reasons": ["[PRR-007] MASS_DESTRUCT-Signal erkannt – sofortiger Reflex-DENY", "Danger Signals erkannt: MASS_DESTRUCT, INJ_OVERRIDE, STEALTH"],
+        "danger_signals": ["MASS_DESTRUCT","INJ_OVERRIDE","STEALTH"], "contaminated": true, "error": ""
+      }
+    },
+    {
+      "event_id": "e009", "session_id": "DEMO-001",
+      "event_type": "tool_call", "timestamp": "2026-03-05T09:00:06.2",
+      "payload": { "tool": "files", "result_summary": "GEBLOCKT: delete → /projects/", "success": false }
+    },
+    {
+      "event_id": "e010", "session_id": "DEMO-001",
+      "event_type": "risk_evaluated", "timestamp": "2026-03-05T09:00:07.1",
+      "payload": {
+        "verb": "send", "tool": "email", "target": "attacker@gmail.com",
+        "decision": "DENY", "risk_score": 100,
+        "score_breakdown": {"impact":95,"trust_modifier":25,"danger_sum":0,"behavior_bonus":10,"total":100},
+        "matched_rule_ids": ["PRR-003"],
+        "reasons": ["[PRR-003] Untrusted Source darf keine externe Kommunikation triggern", "Risk Score 100/100 (High)"],
+        "danger_signals": [], "contaminated": true, "error": ""
+      }
+    },
+    {
+      "event_id": "e011", "session_id": "DEMO-001",
+      "event_type": "tool_call", "timestamp": "2026-03-05T09:00:07.2",
+      "payload": { "tool": "email", "result_summary": "GEBLOCKT: send → attacker@gmail.com", "success": false }
+    },
+    {
+      "event_id": "e012", "session_id": "DEMO-001",
+      "event_type": "risk_evaluated", "timestamp": "2026-03-05T09:00:08.1",
+      "payload": {
+        "verb": "delete", "tool": "files", "target": "/tmp/demo_sandbox/old_report.pdf",
+        "decision": "ALLOW", "risk_score": 100,
+        "score_breakdown": {"impact":85,"trust_modifier":25,"danger_sum":0,"behavior_bonus":0,"total":100},
+        "matched_rule_ids": ["PRR-002","PREVIEW_UNAVAILABLE"],
+        "reasons": ["[PRR-002] Jede Löschaktion erfordert menschliche Bestätigung", "Preview konnte nicht generiert werden → DENY statt ASK"],
+        "danger_signals": [], "contaminated": true, "error": ""
+      }
+    },
+    {
+      "event_id": "e013", "session_id": "DEMO-001",
+      "event_type": "tool_call", "timestamp": "2026-03-05T09:00:08.2",
+      "payload": { "tool": "files", "result_summary": "GEBLOCKT: delete → /tmp/demo_sandbox/old_report.pdf", "success": false }
+    },
+    {
+      "event_id": "e014", "session_id": "DEMO-001",
+      "event_type": "risk_evaluated", "timestamp": "2026-03-05T09:00:09.1",
+      "payload": {
+        "verb": "send", "tool": "email", "target": "colleague@company.com",
+        "decision": "ALLOW", "risk_score": 100,
+        "score_breakdown": {"impact":95,"trust_modifier":25,"danger_sum":0,"behavior_bonus":0,"total":100},
+        "matched_rule_ids": ["TOL-001"],
+        "reasons": ["[TOL-001] Interne Kommunikation auf Allowlist ist erlaubt"],
+        "danger_signals": [], "contaminated": true, "error": ""
+      }
+    },
+    {
+      "event_id": "e015", "session_id": "DEMO-001",
+      "event_type": "tool_call", "timestamp": "2026-03-05T09:00:09.2",
+      "payload": { "tool": "email", "result_summary": "Ausgeführt: send → colleague@company.com", "success": true }
+    }
+  ],
+  "session_summary": {
+    "session_id": "DEMO-001",
+    "total_actions": 7,
+    "allow_count": 5,
+    "ask_count": 0,
+    "deny_count": 2,
+    "approve_count": 0,
+    "reject_count": 0,
+    "approval_rate": 0.0,
+    "deny_rate": 28.6,
+    "top_rules": [
+      {"rule_id": "PRR-005", "count": 3},
+      {"rule_id": "PRR-002", "count": 1},
+      {"rule_id": "PREVIEW_UNAVAILABLE", "count": 1}
+    ],
+    "untrusted_influence_rate": 57.1
+  }
+};
+
+// ── Boot ─────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
