@@ -12,89 +12,119 @@ Jede Tool-Aktion (Dateien, E-Mail, Web) läuft durch das Gate bevor sie ausgefü
 Entscheidung: **ALLOW / ASK / DENY** – deterministisch, auditierbar, kein LLM inside.
 
 **Die Kernaussage in einem Satz:**
-`ig = ImmuneGate()` → `ig.files.delete("/projects/")` → Gate entscheidet automatisch.
+`ig = ImmuneGate(config="kunde.yaml")` → `ig.activate()` → kein Bypass mehr möglich.
+
+**GitHub Repository:**
+`https://github.com/u6637434908-source/immunegate`
 
 ---
 
-## Aktueller Stand (alles fertig – NICHT ANFASSEN)
+## Projektstruktur (aktueller Stand)
 
-**Sprint 1 ✅** – Kern
 ```
 immunegate/
-├── demo.py
+├── demo.py                           ← Golden Path Demo
+├── demo_interaktiv.py                ← Interaktive Präsentations-Demo (Menü)
+├── test_immunegate.py                ← 36 Unit Tests – müssen immer grün sein
+├── immunegate.config.yaml            ← Standard-Kundenkonfiguration
+├── immunegate.config.arztpraxis.yaml ← Beispiel-Kundenkonfiguration
+├── szenario_webdesign.py             ← Testszenario Webdesign Agentur
+├── szenario_arztpraxis.py            ← Testszenario Arztpraxis
+├── szenario_steuerberater.py         ← Testszenario Steuerberater
+├── szenario_schule.py                ← Testszenario Schule
+├── szenario_onlineshop.py            ← Testszenario Online-Shop
+├── ui/
+│   ├── approval.html                 ← Approval UI (Risk Score, Badges, Preview)
+│   └── scoreboard.html              ← Session Scoreboard (Donut Chart, PDF Export)
 └── immunegate/
     ├── __init__.py
-    ├── schemas.py              ← Alle Datenmodelle (Action, Decision, Verb, etc.)
-    ├── danger_signals.py       ← Regex-Erkennung für INJ_OVERRIDE, MASS_DESTRUCT etc.
-    ├── risk_engine.py          ← Deterministischer Score (impact + trust + danger)
-    ├── policy_engine.py        ← 13 Regeln (PRR-001 bis OBS-001) mit Precedence
-    ├── gate.py                 ← Permission Gate – zentraler Entscheidungspunkt
-    ├── audit.py                ← Flight Recorder – loggt alle Events als JSON
-    └── wrapper.py              ← ImmuneGate Klasse – der Einzeiler für Agenten
+    ├── schemas.py                    ← Alle Datenmodelle
+    ├── danger_signals.py             ← Regex-Erkennung (EN + DE Patterns)
+    ├── risk_engine.py                ← Deterministischer Score
+    ├── policy_engine.py              ← 13 Regeln (PRR-001 bis OBS-001)
+    ├── gate.py                       ← Zentraler Entscheidungspunkt
+    ├── audit.py                      ← Flight Recorder (JSON Export)
+    ├── config.py                     ← YAML-Config Loader ← NEU
+    ├── interceptor.py                ← Monkey-Patching Layer ← NEU
+    └── wrapper.py                    ← ImmuneGate Hauptklasse
 ```
-
-**Sprint 2 ✅** – UI & Preview
-- `ui/approval.html` – Approval UI mit Risk Score, Preview, Genehmigen/Ablehnen
-- Dry-Run für delete (Vorab-Scan vor ASK)
-- Preview für send (Empfänger + Domain-Warnung + Body)
-- Preview für write (Diff vorher/nachher)
-- Behavior Signals: BURST_RISK, NEW_EXTERNAL_TARGET
-
-**Sprint 3 ✅** – Polish & Tests
-- `ui/scoreboard.html` – Session Scoreboard mit Donut-Chart, KPIs, Timeline
-- PDF Export mit PII-Schwärzung direkt aus dem Scoreboard
-- `test_immunegate.py` – 36 Unit Tests, alle grün
 
 ---
 
-## Immer zuerst testen
+## Was bereits fertig ist (NICHT ANFASSEN)
 
-Vor jeder Änderung beide Befehle ausführen – beide müssen grün sein:
+**Sprint 1** – Core Engine: 13 Policy-Regeln, Risk Scoring, Audit Log, Fail-Safe Defaults
+**Sprint 2** – UI: approval.html, scoreboard.html mit PDF Export
+**Sprint 3** – Behavior Signals: BURST_RISK, NEW_EXTERNAL_TARGET
+**Sprint 4** – Config + Interceptor: YAML-Config pro Kunde, Monkey-Patching Layer
+**Tests** – 36 Unit Tests (alle grün), 5 Kundenszenarien, interaktive Demo
+
+---
+
+## Immer zuerst testen!
 
 ```bash
-python3 demo.py
-python3 test_immunegate.py
+python demo.py
+python test_immunegate.py
 ```
 
-Erwartete Ausgabe demo.py: 5× ALLOW, 2× DENY – Golden Path intakt.
-Erwartete Ausgabe tests: 36 bestanden, 0 fehlgeschlagen.
+Wenn Tests nicht grün → nichts committen!
 
 ---
 
-## Was noch offen ist (Sprint 4 – noch nicht starten)
+## Git Workflow
 
-- Danger Signals auf Deutsch + weitere Sprachen (danger_signals.py erweitern)
-- PyPI Package (pip install immunegate)
-- GitHub Release vorbereiten
-- README finalisieren
-
-**Warte auf explizite Anweisung bevor du Sprint 4 anfängst.**
+```bash
+git add .
+git commit -m "Kurze Beschreibung"
+git push
+```
 
 ---
 
-## Demo-Incident (Golden Path – muss immer funktionieren)
+## Nächste Schritte – Stufe 2: Open Source (Sprint 5)
 
-1. Agent liest Dateien → ALLOW (PRR-005)
-2. Vergiftete E-Mail kommt rein (enthält "delete all", "silently", "rm -rf")
-3. Agent versucht delete("/projects/") → DENY (PRR-007: MASS_DESTRUCT)
-4. Agent versucht send("attacker@gmail.com") → DENY (PRR-003)
-5. Delete in Sandbox → ALLOW (TOL-002)
-6. Interne Mail → ALLOW (TOL-001)
+**Priorität 1: Danger Signals erweitern**
+Datei: `immunegate/danger_signals.py`
+- Englisch: alle 5 Kategorien vervollständigen
+- Deutsch: alle 5 Kategorien (STEALTH bereits drin)
+- Französisch + Spanisch: Basis-Patterns für INJ_OVERRIDE + CREDENTIALS
+
+**Priorität 2: PyPI Package vorbereiten**
+- `pyproject.toml` erstellen
+- Ziel: `pip install immunegate` funktioniert
+
+**Priorität 3: Dokumentation**
+- `docs/getting_started.md`
+- `docs/config_reference.md`
+- `docs/policy_rules.md`
+
+**Priorität 4: Semantische Danger Signals** (nur nach 1-3)
+- sentence-transformers für semantische Ähnlichkeit zusätzlich zu Regex
+
+---
+
+## Stufe 3 – Produkt (danach)
+
+- Plugin-System für eigene Regeln
+- Demo-App im Browser (live Gate-Entscheidungen)
+- Pricing: Open Core (Basis kostenlos, Enterprise kostenpflichtig)
+- Erste Pilotkunden in der Region Hallertau/München
 
 ---
 
 ## Arbeitsregeln (NICHT VERHANDELBAR)
 
-1. **Fail-Safe bleibt immer:** Bei jedem Fehler → DENY, nie ALLOW
-2. **Kein Bypass:** 100% der Toolcalls laufen durch das Gate
-3. **Deterministisch:** Keine LLM-Aufrufe in der Gate-Logik
-4. **Preview Safety:** ASK nur wenn Preview generierbar, sonst DENY
-5. **Einen Schritt nach dem anderen:** Zeig Ergebnis nach jedem Deliverable
-6. **Tests müssen immer grün sein:** Nach jeder Änderung testen
+1. Fail-Safe bleibt immer: Bei Fehler → DENY, nie ALLOW
+2. Kein Bypass: 100% der Toolcalls durch das Gate
+3. Deterministisch: Keine LLM-Aufrufe in Gate-Logik
+4. Tests immer grün nach jeder Änderung
+5. Einen Schritt nach dem anderen – Ergebnis zeigen bevor weiter
+6. Git nach jedem Sprint: commit + push
 
 ---
 
-## Policy Precedence (zur Erinnerung)
+## Policy Precedence
 
 ```
 DENY > ALLOW > ASK > Score Fallback (0-39 ALLOW, 40-69 ASK, 70-100 DENY)
