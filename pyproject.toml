@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "immunegate"
+version = "0.1.0"
+description = "Das Immunsystem für KI-Agenten – deterministischer Security & Trust Layer"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Bettina Mayerhofer" }
+]
+keywords = [
+    "ai", "agent", "security", "llm", "prompt-injection",
+    "access-control", "audit", "policy", "trust"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+requires-python = ">=3.9"
+dependencies = []   # Keine Pflichtabhängigkeiten – nur Python-Standardbibliothek
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6.0"]   # Für robusteres YAML-Parsing (config.py nutzt auch eingebauten Parser)
+dev  = [
+    "pyyaml>=6.0",
+    "build>=1.0",
+    "twine>=4.0",
+]
+
+[project.urls]
+Homepage   = "https://github.com/u6637434908-source/immunegate"
+Repository = "https://github.com/u6637434908-source/immunegate"
+Issues     = "https://github.com/u6637434908-source/immunegate/issues"
+
+[tool.setuptools.packages.find]
+where   = ["."]
+include = ["immunegate*"]
+exclude = ["tests*", "ui*", "docs*"]
