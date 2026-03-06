@@ -4,11 +4,17 @@ Evaluiert Policy-Regeln mit Precedence: DENY > ALLOW > ASK > Score Fallback.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from .schemas import Action, Decision, Verb, Destination, SourceTrust, DangerSignal, Sensitivity
 
+if TYPE_CHECKING:
+    from .config import ImmuneGateConfig
+
 UNTRUSTED_SOURCES = {SourceTrust.WEB, SourceTrust.EMAIL_EXTERNAL}
-INTERNAL_ALLOWLIST = {"company.com", "intern.local", "localhost"}  # Erweiterbar
+
+# Defaults – werden durch Config überschrieben
+_DEFAULT_ALLOWLIST     = {"company.com", "intern.local", "localhost"}
+_DEFAULT_SANDBOX_PATHS = ["/tmp/demo_sandbox/", "/tmp/test/"]
 
 
 # ─── POLICY RULE ──────────────────────────────────────────────────────────────
@@ -28,11 +34,15 @@ def _get_recipient_domain(target: str) -> str:
     return target.lower()
 
 
-def evaluate_policies(action: Action) -> list[PolicyMatch]:
+def evaluate_policies(action: Action, config=None) -> list[PolicyMatch]:
     """
     Evaluiert alle Regeln und gibt Matches zurück.
     Caller wendet Precedence an: DENY > ALLOW > ASK
     """
+    # Config-Werte oder Defaults
+    internal_allowlist = set(config.internal_domains) if config else _DEFAULT_ALLOWLIST
+    sandbox_paths      = config.sandbox_paths if config else _DEFAULT_SANDBOX_PATHS
+
     matches = []
 
     # ── PRR: Primär-Reflexregeln (angeboren, sicherheitskritisch) ─────────────
@@ -94,20 +104,20 @@ def evaluate_policies(action: Action) -> list[PolicyMatch]:
     # TOL-001: Send internal auf Allowlist → ALLOW
     if (action.verb == Verb.SEND
             and action.destination == Destination.INTERNAL
-            and _get_recipient_domain(action.target) in INTERNAL_ALLOWLIST):
+            and _get_recipient_domain(action.target) in internal_allowlist):
         matches.append(PolicyMatch("TOL-001", Decision.ALLOW,
             "Interne Kommunikation auf Allowlist ist erlaubt"))
 
     # TOL-002: Delete in Sandbox → ALLOW
     if (action.verb == Verb.DELETE
-            and action.target.startswith("/tmp/demo_sandbox/")):
+            and any(action.target.startswith(p) for p in sandbox_paths)):
         matches.append(PolicyMatch("TOL-002", Decision.ALLOW,
             "Delete in Sandbox-Bereich ist erlaubt"))
 
     # TOL-003: Send external an neue Domain → ASK
     if (action.verb == Verb.SEND
             and action.destination == Destination.EXTERNAL
-            and _get_recipient_domain(action.target) not in INTERNAL_ALLOWLIST
+            and _get_recipient_domain(action.target) not in internal_allowlist
             and action.source_trust == SourceTrust.USER_DIRECT):
         matches.append(PolicyMatch("TOL-003", Decision.ASK,
             "Neue externe Empfänger müssen bestätigt werden"))

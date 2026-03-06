@@ -1,0 +1,36 @@
+# immunegate.config.yaml
+# Standard-Konfiguration für ImmuneGate
+# Kopiere diese Datei und passe sie für jeden Kunden an.
+
+meta:
+  customer_name: "Mein Unternehmen"
+  policy_version: "v1.0"
+  contact_email: "admin@meinunternehmen.de"
+
+session:
+  id: "agent-session-001"
+
+# Score-Schwellenwerte (0-100)
+# 0 bis allow_max  → ALLOW
+# allow_max+1 bis ask_max → ASK
+# ask_max+1 bis 100 → DENY
+thresholds:
+  allow_max: 39
+  ask_max: 69
+  deny_min: 70
+
+# Erlaubte interne Domains und Sandbox-Pfade
+allowlist:
+  internal_domains:
+    - "company.com"
+    - "intern.local"
+    - "localhost"
+  sandbox_paths:
+    - "/tmp/demo_sandbox/"
+    - "/tmp/test/"
+
+# Policy-Einstellungen
+policy:
+  require_preview_for_ask: true
+  contamination_enabled: true
+  burst_risk_threshold: 3

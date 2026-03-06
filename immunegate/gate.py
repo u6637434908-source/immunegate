@@ -3,14 +3,12 @@ ImmuneGate – Permission Gate
 Der zentrale Entscheidungspunkt. Kein Toolcall passiert ohne Gate.
 """
 
-import os
-from datetime import datetime
+from __future__ import annotations
+from typing import Optional
 from .schemas import Action, Decision, GateResult, ScoreBreakdown
 from .risk_engine import calculate_score, score_to_decision
 from .policy_engine import evaluate_policies, apply_precedence
 from .audit import AuditLog
-
-_DRY_RUN_MAX_FILES = 200  # Sicherheitslimit – mehr Dateien → abgeschnitten
 
 
 class PermissionGate:
@@ -21,8 +19,9 @@ class PermissionGate:
     Fail-Safe: bei jedem Fehler → DENY
     """
 
-    def __init__(self, audit_log: AuditLog):
-        self.audit = audit_log
+    def __init__(self, audit_log: AuditLog, config=None):
+        self.audit  = audit_log
+        self.config = config
 
     def evaluate(self, action: Action) -> GateResult:
         """
@@ -50,7 +49,7 @@ class PermissionGate:
         risk_score  = breakdown.total
 
         # 2. Policy Engine evaluieren
-        matches     = evaluate_policies(action)
+        matches     = evaluate_policies(action, config=self.config)
         top_match   = apply_precedence(matches)
 
         # 3. Entscheidung treffen
@@ -62,7 +61,7 @@ class PermissionGate:
             reasons          = self._build_reasons(action, matches, risk_score, decision)
         else:
             # Score Fallback (kein Policy-Match)
-            decision         = score_to_decision(risk_score)
+            decision         = score_to_decision(risk_score, config=self.config)
             matched_rule_ids = ["SCORE_FALLBACK"]
             reasons          = [f"Score fallback: {risk_score}/100 → {decision.value}",
                                  self._score_reason(action, breakdown)]
@@ -122,42 +121,36 @@ class PermissionGate:
             parts.append(f"BehaviorBonus={breakdown.behavior_bonus}")
         return " + ".join(parts) + f" = {breakdown.total}"
 
-    def _build_preview_spec(self, action):
+    def _build_preview_spec(self, action) -> dict | None:
         """
         Erstellt Preview-Spec für die Approval UI.
         Gibt None zurück wenn Preview nicht generierbar → Gate wird DENY.
+        
+        HINWEIS: Dies ist der Platzhalter für den dry-run Mechanismus.
+        In Sprint 2 wird hier der echte dry-run implementiert.
         """
         from .schemas import Verb
 
         if action.verb == Verb.DELETE:
             if not action.target:
                 return None
-            files = self._dry_run_scan(action.target)
-            if files is None:
-                # Scan fehlgeschlagen (Pfad existiert nicht / kein Zugriff) → Fail-Safe
-                return None
             return {
                 "type":          "delete",
                 "target":        action.target,
-                "files":         files,
-                "file_count":    len(files),
                 "warning":       "Diese Aktion ist NICHT umkehrbar ohne Backup!",
-                "recovery_plan": "Prüfe ob Papierkorb / Snapshot verfügbar. Erstelle vor Ausführung ein Backup.",
+                "recovery_plan": "Prüfe ob Papierkorb / Snapshot verfügbar.",
+                "dry_run_note":  "⚠️ Dry-run Implementierung ausstehend (Sprint 2)",
             }
 
         elif action.verb == Verb.SEND:
             if not action.target:
                 return None
-            subject, body = self._parse_email_content(action.content)
-            domain        = action.target.split("@")[-1] if "@" in action.target else action.target
             return {
-                "type":        "send",
-                "recipient":   action.target,
-                "domain":      domain,
-                "domain_risk": self._classify_domain_risk(domain),
-                "subject":     subject,
-                "body":        body,
-                "warning":     "Externe Kommunikation – Empfänger und Inhalt sorgfältig prüfen!",
+                "type":       "send",
+                "recipient":  action.target,
+                "domain":     action.target.split("@")[-1] if "@" in action.target else action.target,
+                "content":    action.content[:500] if action.content else "(kein Inhalt)",
+                "warning":    "Externe Kommunikation – Empfänger sorgfältig prüfen!",
             }
 
         elif action.verb == Verb.UPLOAD:
@@ -169,113 +162,13 @@ class PermissionGate:
             }
 
         elif action.verb in {Verb.WRITE, Verb.WRITE_SENSITIVE}:
-            before, is_new = self._read_existing_file(action.target)
             return {
                 "type":        "write",
                 "target":      action.target,
                 "sensitivity": action.sensitivity_label.value,
-                "is_new_file": is_new,
-                "before":      before,
-                "after":       action.content or "",
+                "content":     action.content[:300] if action.content else "(kein Inhalt)",
+                "diff_note":   "⚠️ Diff-Implementierung ausstehend (Sprint 2)",
             }
 
         # Für alle anderen Verben: kein Preview nötig
         return {"type": "generic", "target": action.target}
-
-    def _parse_email_content(self, content: str):
-        """
-        Extrahiert Subject und Body aus action.content.
-        Format erwartet: "Subject: {subject}\n\n{body}"
-        Gibt (subject, body) zurück.
-        """
-        if not content:
-            return ("", "")
-        if content.startswith("Subject:"):
-            parts = content.split("\n\n", 1)
-            subject = parts[0].replace("Subject:", "").strip()
-            body    = parts[1].strip() if len(parts) > 1 else ""
-        else:
-            subject = ""
-            body    = content
-        return (subject, body)
-
-    def _classify_domain_risk(self, domain: str) -> str:
-        """
-        Klassifiziert das Risiko einer E-Mail-Domain.
-        Gibt "high", "medium" oder "low" zurück.
-        """
-        high_risk = {
-            "gmail.com", "yahoo.com", "yahoo.de", "hotmail.com", "hotmail.de",
-            "outlook.com", "live.com", "protonmail.com", "icloud.com",
-            "aol.com", "gmx.com", "gmx.de", "web.de", "t-online.de",
-        }
-        low_risk = {"company.com", "intern.local"}
-
-        d = domain.lower().strip()
-        if d in high_risk:
-            return "high"
-        if d in low_risk:
-            return "low"
-        return "medium"
-
-    def _read_existing_file(self, path: str):
-        """
-        Liest den aktuellen Inhalt einer Datei für den Write-Diff.
-        Gibt (content, is_new_file) zurück.
-        is_new_file=True wenn die Datei noch nicht existiert.
-        Fail-safe: bei Lesefehler → ("", True) – kein DENY, Diff zeigt nur Hinzugefügtes.
-        """
-        try:
-            if not path or not os.path.isfile(path):
-                return ("", True)
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-                return (f.read(), False)
-        except OSError:
-            return ("", True)
-
-    def _dry_run_scan(self, target: str):
-        """
-        Read-only Vorab-Scan für delete-Targets.
-        Gibt Liste von {path, size, modified} zurück, oder None bei Fehler.
-        None → Gate setzt Entscheidung auf DENY (Fail-Safe).
-        """
-        try:
-            if not os.path.exists(target):
-                return None  # Pfad existiert nicht → Fail-Safe DENY
-
-            files = []
-
-            if os.path.isfile(target):
-                stat = os.stat(target)
-                files.append({
-                    "path":     target,
-                    "size":     stat.st_size,
-                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
-                })
-            elif os.path.isdir(target):
-                for dirpath, _dirnames, filenames in os.walk(target):
-                    for fname in filenames:
-                        if len(files) >= _DRY_RUN_MAX_FILES:
-                            break
-                        fpath = os.path.join(dirpath, fname)
-                        try:
-                            stat = os.stat(fpath)
-                            files.append({
-                                "path":     fpath,
-                                "size":     stat.st_size,
-                                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
-                            })
-                        except OSError:
-                            # Einzelne Datei nicht lesbar → überspringen, Scan läuft weiter
-                            pass
-                    if len(files) >= _DRY_RUN_MAX_FILES:
-                        break
-            else:
-                return None  # Weder Datei noch Verzeichnis → Fail-Safe DENY
-
-            return files
-
-        except PermissionError:
-            return None  # Kein Zugriff → Fail-Safe DENY
-        except OSError:
-            return None  # Anderer OS-Fehler → Fail-Safe DENY

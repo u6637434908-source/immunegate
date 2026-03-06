@@ -11,15 +11,14 @@ Verwendung:
 """
 
 import hashlib
-import time
-from .schemas import Action, Verb, Tool, Destination, SourceTrust, Decision, BehaviorFlag
+from .schemas import Action, Verb, Tool, Destination, SourceTrust, Decision
 from .danger_signals import detect_danger_signals
 from .audit import AuditLog
 from .gate import PermissionGate
-
-# ─── BEHAVIOR DETECTION KONSTANTEN ────────────────────────────────────────────
-_BURST_WINDOW_SEC = 10   # Rollendes Zeitfenster für Burst-Erkennung (Sekunden)
-_BURST_THRESHOLD  = 5    # Actions innerhalb des Fensters → BURST_RISK
+from .config import load_config, ImmuneGateConfig
+from .interceptor import (ImmuneGateInterceptor,
+                           _intercept_delete, _intercept_write,
+                           _intercept_send, _intercept_browse)
 
 
 class ImmuneGate:
@@ -33,23 +32,55 @@ class ImmuneGate:
         ig.web.browse("https://attacker.com")
     """
 
-    def __init__(self, session_id: str = None, auto_deny_ask: bool = False):
+    def __init__(self, session_id: str = None, auto_deny_ask: bool = False, config=None):
         """
+        session_id:    Überschreibt Config session_id wenn angegeben
         auto_deny_ask: True = bei ASK automatisch DENY (non-interactive Modus)
+        config:        Pfad zur YAML-Config oder ImmuneGateConfig-Objekt
         """
-        self.audit          = AuditLog(session_id)
-        self.gate           = PermissionGate(self.audit)
-        self.auto_deny_ask  = auto_deny_ask
-        self._contaminated  = False  # Contamination Tag für Source Lineage
+        # Config laden
+        if isinstance(config, ImmuneGateConfig):
+            self.config = config
+        else:
+            self.config = load_config(config)  # config ist Pfad oder None
 
-        # Behavior Signal Tracking (session-scoped)
-        self._action_timestamps:     list  = []   # Für BURST_RISK
-        self._seen_external_domains: set   = set()  # Für NEW_EXTERNAL_TARGET
+        # Session ID: Parameter > Config > Default
+        effective_session = session_id or self.config.session_id
+
+        if self.config.customer_name:
+            print(f"\n  [ImmuneGate] Kunde: {self.config.customer_name} | Policy: {self.config.policy_version}")
+            print(f"  [ImmuneGate] Domains: {', '.join(self.config.internal_domains)}")
+
+        self.audit          = AuditLog(effective_session)
+        self.gate           = PermissionGate(self.audit, config=self.config)
+        self.auto_deny_ask  = auto_deny_ask
+        self._contaminated  = False
+        self._interceptor   = ImmuneGateInterceptor(self)
+
+        # Intercept-Methoden auf self patchen
+        self._intercept_delete = lambda path:          _intercept_delete(self, path)
+        self._intercept_write  = lambda path, c="":    _intercept_write(self, path, c)
+        self._intercept_send   = lambda rec, c="":     _intercept_send(self, rec, c)
+        self._intercept_browse = lambda url:           _intercept_browse(self, url)
 
         # Sub-wrappers
         self.files = _FilesWrapper(self)
         self.email = _EmailWrapper(self)
         self.web   = _WebWrapper(self)
+
+    def activate(self):
+        """
+        Aktiviert den Interceptor Layer.
+        Ab jetzt können os.remove, smtplib etc. das Gate nicht mehr umgehen.
+        """
+        self._interceptor.activate()
+
+    def deactivate(self):
+        """
+        Deaktiviert den Interceptor Layer.
+        Originalfunktionen werden wiederhergestellt.
+        """
+        self._interceptor.deactivate()
 
     def receive_input(self, content: str, source_trust: SourceTrust) -> str:
         """
@@ -81,11 +112,6 @@ class ImmuneGate:
         # Contamination Tag übertragen
         action.contaminated = self._contaminated
         action.session_id   = self.audit.session_id
-
-        # Behavior Flags erkennen und in Action eintragen
-        detected = self._detect_behavior_flags(action)
-        if detected:
-            action.behavior_flags = list(set(action.behavior_flags) | set(detected))
 
         # Gate evaluieren
         result = self.gate.evaluate(action)
@@ -127,48 +153,6 @@ class ImmuneGate:
             )
             return False
 
-    def _detect_behavior_flags(self, action: Action) -> list:
-        """
-        Erkennt Verhaltensanomalien im Session-Kontext.
-        Gibt Liste von BehaviorFlags zurück die zur Action hinzugefügt werden sollen.
-        Deterministisch, kein LLM.
-        """
-        flags = []
-        now   = time.monotonic()
-
-        # ── BURST_RISK: zu viele Actions in kurzer Zeit ────────────────────────
-        self._action_timestamps.append(now)
-        # Alte Timestamps außerhalb des Fensters entfernen
-        self._action_timestamps = [
-            t for t in self._action_timestamps if now - t <= _BURST_WINDOW_SEC
-        ]
-        if len(self._action_timestamps) >= _BURST_THRESHOLD:
-            flags.append(BehaviorFlag.BURST_RISK)
-
-        # ── NEW_EXTERNAL_TARGET: erstmalige externe Destination ────────────────
-        if action.destination == Destination.EXTERNAL and action.target:
-            domain = self._extract_domain(action.target)
-            if domain and domain not in self._seen_external_domains:
-                flags.append(BehaviorFlag.NEW_EXTERNAL_TARGET)
-            if domain:
-                self._seen_external_domains.add(domain)
-
-        return flags
-
-    def _extract_domain(self, target: str) -> str:
-        """Extrahiert die Domain aus E-Mail-Adresse, URL oder Hostname."""
-        if not target:
-            return ""
-        if "@" in target:                       # E-Mail: user@domain.com
-            return target.split("@")[-1].lower().strip()
-        if "://" in target:                     # URL: https://host.com/path
-            try:
-                host = target.split("://", 1)[1].split("/")[0].lower()
-                return host.split(":")[0]       # Port abschneiden
-            except (IndexError, ValueError):
-                return target.lower()
-        return target.lower().strip()           # Reiner Hostname
-
     def _print_gate_result(self, result):
         icons = {Decision.ALLOW: "✅", Decision.ASK: "⚠️ ", Decision.DENY: "🛑"}
         icon  = icons[result.decision]
@@ -176,9 +160,6 @@ class ImmuneGate:
         print(f"   Risk Score: {result.risk_score}/100  |  Rules: {', '.join(result.matched_rule_ids)}")
         for i, reason in enumerate(result.reasons, 1):
             print(f"   Grund {i}: {reason}")
-        if result.action.behavior_flags:
-            flags_str = ", ".join(f.value for f in result.action.behavior_flags)
-            print(f"   Behavior:  {flags_str}")
 
     def _ask_human(self, result) -> bool:
         print(f"\n  📋 PREVIEW:")
@@ -234,10 +215,11 @@ class _EmailWrapper:
         self._ig = ig
 
     def send(self, recipient: str, subject: str, body: str = "") -> bool:
-        domain      = recipient.split("@")[-1] if "@" in recipient else recipient
-        destination = (Destination.INTERNAL
-                       if domain in {"company.com", "intern.local"}
-                       else Destination.EXTERNAL)
+        domain         = recipient.split("@")[-1] if "@" in recipient else recipient
+        internal_set   = set(self._ig.config.internal_domains) if self._ig.config else {"company.com", "intern.local"}
+        destination    = (Destination.INTERNAL
+                          if domain in internal_set
+                          else Destination.EXTERNAL)
         ds = detect_danger_signals(f"{subject} {body}")
         return self._ig._execute(Action(
             verb=Verb.SEND, tool=Tool.EMAIL,

@@ -49,11 +49,13 @@ BEHAVIOR_BONUS: dict[BehaviorFlag, int] = {
 
 # ─── SCORE THRESHOLDS ─────────────────────────────────────────────────────────
 
-def score_to_decision(score: int) -> Decision:
+def score_to_decision(score: int, config=None) -> Decision:
     """Score Fallback – nur wenn keine Policy greift."""
-    if score <= 39:
+    allow_max = config.allow_max if config else 39
+    ask_max   = config.ask_max   if config else 69
+    if score <= allow_max:
         return Decision.ALLOW
-    elif score <= 69:
+    elif score <= ask_max:
         return Decision.ASK
     else:
         return Decision.DENY

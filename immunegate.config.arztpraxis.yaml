@@ -1,0 +1,31 @@
+# immunegate.config.arztpraxis.yaml
+# Konfiguration für Arztpraxis Dr. Elisabeth Hofer
+
+meta:
+  customer_name: "Arztpraxis Dr. Elisabeth Hofer"
+  policy_version: "v1.0"
+  contact_email: "hofer@praxis-hofer.de"
+
+session:
+  id: "praxis-hofer-agent"
+
+# Strenge Schwellenwerte für Patientendaten
+thresholds:
+  allow_max: 29
+  ask_max: 59
+  deny_min: 60
+
+allowlist:
+  internal_domains:
+    - "praxis-hofer.de"
+    - "medlabor.de"
+    - "krankenhaus-mainburg.de"
+    - "kassenarzt.de"
+  sandbox_paths:
+    - "/tmp/praxis_sandbox/"
+    - "/tmp/test/"
+
+policy:
+  require_preview_for_ask: true
+  contamination_enabled: true
+  burst_risk_threshold: 2
