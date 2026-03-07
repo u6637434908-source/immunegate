@@ -6,9 +6,12 @@ Keine externe Abhängigkeit – nutzt Python-Standardbibliothek.
 
 import hashlib
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Optional
+
+logger = logging.getLogger("immunegate.config")
 
 
 # ─── CONFIG DATACLASS ─────────────────────────────────────────────────────────
@@ -137,8 +140,8 @@ def _parse_simple_yaml(path: str) -> dict:
                                 result[key] = _cast(value)
 
     except Exception as e:
-        print(f"  [ImmuneGate Config] Fehler beim Lesen von {path}: {e}")
-        print(f"  [ImmuneGate Config] Verwende Standard-Konfiguration.")
+        logger.warning("Fehler beim Lesen von %s: %s", path, e)
+        logger.warning("Verwende Standard-Konfiguration.")
 
     return result
 

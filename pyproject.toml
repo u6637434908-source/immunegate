@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "immunegate"
-version = "0.1.0"
+version = "0.9.0"
 description = "Das Immunsystem für KI-Agenten – deterministischer Security & Trust Layer"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -40,6 +40,9 @@ dev  = [
     "build>=1.0",
     "twine>=4.0",
 ]
+
+[project.scripts]
+immunegate = "immunegate.cli:main"
 
 [project.urls]
 Homepage   = "https://github.com/u6637434908-source/immunegate"

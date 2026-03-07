@@ -3,15 +3,24 @@ ImmuneGate – Tool Wrapper
 Der Einzeiler der jeden Agenten schützt: gate.wrap(agent)
 
 Verwendung:
-    from immunegate import ImmunGate
+    from immunegate import ImmuneGate
     ig = ImmuneGate()
     ig.files.delete("/projects/")       # → Gate evaluiert automatisch
     ig.email.send("user@extern.com", "Hallo", body="...")
     ig.web.browse("https://example.com")
+
+Async-Verwendung:
+    await ig.files.delete_async("/projects/")
+    await ig.email.send_async("user@extern.com", "Hallo", body="...")
 """
 
+from __future__ import annotations
+
 import hashlib
-from .schemas import Action, Verb, Tool, Destination, SourceTrust, Decision
+import logging
+from typing import List, Optional, Union
+
+from .schemas import Action, Verb, Tool, Destination, SourceTrust, Decision, GateResult
 from .danger_signals import detect_danger_signals
 from .audit import AuditLog
 from .gate import PermissionGate
@@ -20,24 +29,34 @@ from .interceptor import (ImmuneGateInterceptor,
                            _intercept_delete, _intercept_write,
                            _intercept_send, _intercept_browse)
 
+logger = logging.getLogger("immunegate")
+
 
 class ImmuneGate:
     """
     Hauptklasse für Agenten-Integration.
-    
-    Beispiel:
+
+    Beispiel (sync):
         ig = ImmuneGate()
         ig.files.delete("/projects/report.pdf")
         ig.email.send("extern@gmail.com", "Subject", body="...")
-        ig.web.browse("https://attacker.com")
+
+    Beispiel (async):
+        ig = ImmuneGate(auto_deny_ask=True)
+        result = await ig.files.delete_async("/projects/report.pdf")
     """
 
-    def __init__(self, session_id: str = None, auto_deny_ask: bool = False,
-                 config=None, plugins=None):
+    def __init__(
+        self,
+        session_id: Optional[str] = None,
+        auto_deny_ask: bool = False,
+        config: Optional[Union[str, ImmuneGateConfig]] = None,
+        plugins: Optional[Union[str, List]] = None,
+    ) -> None:
         """
         session_id:    Überschreibt Config session_id wenn angegeben
         auto_deny_ask: True = bei ASK automatisch DENY (non-interactive Modus)
-        config:        Pfad zur YAML-Config oder ImmuneGateConfig-Objekt
+        config:        Pfad zur YAML-Config (str) oder ImmuneGateConfig-Objekt
         plugins:       Pfad zum Plugin-Verzeichnis (str) oder Liste von
                        BasePlugin-Instanzen. None = keine Plugins.
                        Beispiel: plugins="plugins/"
@@ -52,47 +71,54 @@ class ImmuneGate:
         effective_session = session_id or self.config.session_id
 
         if self.config.customer_name:
-            print(f"\n  [ImmuneGate] Kunde: {self.config.customer_name} | Policy: {self.config.policy_version}")
-            print(f"  [ImmuneGate] Domains: {', '.join(self.config.internal_domains)}")
+            logger.info(
+                "Kunde: %s | Policy: %s",
+                self.config.customer_name,
+                self.config.policy_version,
+            )
+            logger.info("Domains: %s", ", ".join(self.config.internal_domains))
 
         # Plugins laden
         from .plugins import BasePlugin, load_plugins
         if isinstance(plugins, str):
             loaded_plugins = load_plugins(plugins)
             if loaded_plugins:
-                print(f"  [ImmuneGate] Plugins geladen: {len(loaded_plugins)} "
-                      f"({', '.join(p.plugin_id for p in loaded_plugins)})")
+                logger.info(
+                    "Plugins geladen: %d (%s)",
+                    len(loaded_plugins),
+                    ", ".join(p.plugin_id for p in loaded_plugins),
+                )
         elif isinstance(plugins, list):
             loaded_plugins = [p for p in plugins if isinstance(p, BasePlugin)]
         else:
             loaded_plugins = []
 
-        self.audit          = AuditLog(effective_session)
-        self.gate           = PermissionGate(self.audit, config=self.config,
-                                             plugins=loaded_plugins)
-        self.auto_deny_ask  = auto_deny_ask
-        self._contaminated  = False
-        self._interceptor   = ImmuneGateInterceptor(self)
+        self.audit         = AuditLog(effective_session)
+        self.gate          = PermissionGate(self.audit, config=self.config,
+                                            plugins=loaded_plugins)
+        self.auto_deny_ask = auto_deny_ask
+        self._contaminated = False
+        self._interceptor  = ImmuneGateInterceptor(self)
 
         # Intercept-Methoden auf self patchen
-        self._intercept_delete = lambda path:          _intercept_delete(self, path)
-        self._intercept_write  = lambda path, c="":    _intercept_write(self, path, c)
-        self._intercept_send   = lambda rec, c="":     _intercept_send(self, rec, c)
-        self._intercept_browse = lambda url:           _intercept_browse(self, url)
+        self._intercept_delete = lambda path:       _intercept_delete(self, path)
+        self._intercept_write  = lambda path, c="": _intercept_write(self, path, c)
+        self._intercept_send   = lambda rec, c="":  _intercept_send(self, rec, c)
+        self._intercept_browse = lambda url:        _intercept_browse(self, url)
 
-        # Sub-wrappers
+        # Sub-Wrappers
         self.files = _FilesWrapper(self)
         self.email = _EmailWrapper(self)
         self.web   = _WebWrapper(self)
 
-    def activate(self):
+    def activate(self) -> None:
         """
         Aktiviert den Interceptor Layer.
         Ab jetzt können os.remove, smtplib etc. das Gate nicht mehr umgehen.
         """
         self._interceptor.activate()
 
-    def deactivate(self):
+    def deactivate(self) -> None:
         """
         Deaktiviert den Interceptor Layer.
         Originalfunktionen werden wiederhergestellt.
@@ -103,7 +129,7 @@ class ImmuneGate:
         """
         Registriert einen externen Input.
         Setzt Contamination Tag wenn untrusted.
-        Gibt input_id zurück für Source Lineage.
+        Gibt content_hash zurück für Source Lineage.
         """
         danger_signals = detect_danger_signals(content)
         content_hash   = hashlib.sha256(content.encode()).hexdigest()[:16]
@@ -123,7 +149,7 @@ class ImmuneGate:
 
     def _execute(self, action: Action) -> bool:
         """
-        Zentrale Execute-Methode.
+        Zentrale Execute-Methode (synchron).
         Gibt True zurück wenn Aktion ausgeführt wurde.
         """
         # Contamination Tag übertragen
@@ -133,13 +159,13 @@ class ImmuneGate:
         # Gate evaluieren
         result = self.gate.evaluate(action)
 
-        # Entscheidung anzeigen
-        self._print_gate_result(result)
+        # Ergebnis loggen
+        self._log_gate_result(result)
 
         if result.decision == Decision.ALLOW:
             self.audit.log_tool_call(
                 action.action_id, action.tool.value,
-                f"Ausgeführt: {action.verb.value} → {action.target}", True
+                f"Ausgeführt: {action.verb.value} → {action.target}", True,
             )
             return True
 
@@ -147,7 +173,7 @@ class ImmuneGate:
             self.audit.log_gate_prompt(action.action_id, result.preview or {})
 
             if self.auto_deny_ask:
-                print("  [Auto-DENY da non-interactive Modus]")
+                logger.info("[Auto-DENY] non-interactive Modus")
                 self.audit.log_human_decision(action.action_id, "auto_deny")
                 return False
 
@@ -159,26 +185,47 @@ class ImmuneGate:
             if approved:
                 self.audit.log_tool_call(
                     action.action_id, action.tool.value,
-                    f"Ausgeführt nach Bestätigung: {action.verb.value} → {action.target}", True
+                    f"Ausgeführt nach Bestätigung: {action.verb.value} → {action.target}", True,
                 )
             return approved
 
         else:  # DENY
             self.audit.log_tool_call(
                 action.action_id, action.tool.value,
-                f"GEBLOCKT: {action.verb.value} → {action.target}", False
+                f"GEBLOCKT: {action.verb.value} → {action.target}", False,
             )
             return False
 
-    def _print_gate_result(self, result):
-        icons = {Decision.ALLOW: "✅", Decision.ASK: "⚠️ ", Decision.DENY: "🛑"}
-        icon  = icons[result.decision]
-        print(f"\n{icon} GATE [{result.decision.value}] {result.action.verb.value.upper()} → {result.action.target or '(kein Ziel)'}")
-        print(f"   Risk Score: {result.risk_score}/100  |  Rules: {', '.join(result.matched_rule_ids)}")
-        for i, reason in enumerate(result.reasons, 1):
-            print(f"   Grund {i}: {reason}")
+    async def _execute_async(self, action: Action) -> bool:
+        """
+        Async-Wrapper für _execute().
 
-    def _ask_human(self, result) -> bool:
+        Führt die synchrone Gate-Logik in einem ThreadPool-Executor aus.
+        Für non-interactive Nutzung (auto_deny_ask=True) empfohlen.
+        """
+        import asyncio
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._execute, action)
+
+    def _log_gate_result(self, result: GateResult) -> None:
+        """Logt Gate-Entscheidung via logging.info."""
+        icons  = {Decision.ALLOW: "✅", Decision.ASK: "⚠️ ", Decision.DENY: "🛑"}
+        icon   = icons[result.decision]
+        target = result.action.target or "(kein Ziel)"
+        logger.info(
+            "%s GATE [%s] %s → %s | Score: %d/100 | Rules: %s",
+            icon,
+            result.decision.value,
+            result.action.verb.value.upper(),
+            target,
+            result.risk_score,
+            ", ".join(result.matched_rule_ids),
+        )
+        for reason in result.reasons:
+            logger.info("   Grund: %s", reason)
+
+    def _ask_human(self, result: GateResult) -> bool:
+        """Interaktive Bestätigung (sync, blockierend)."""
         print(f"\n  📋 PREVIEW:")
         if result.preview:
             for k, v in result.preview.items():
@@ -186,76 +233,155 @@ class ImmuneGate:
         response = input("\n  → Aktion genehmigen? [j/n]: ").strip().lower()
         return response in {"j", "ja", "y", "yes"}
 
-    def export_audit(self, filepath: str = "immunegate_audit.json"):
+    def export_audit(self, filepath: str = "immunegate_audit.json") -> None:
+        """Exportiert den Audit Log als JSON-Datei."""
         self.audit.export_json(filepath)
 
-    def print_summary(self):
+    def print_summary(self) -> None:
+        """Gibt Session Summary auf der Konsole aus."""
         self.audit.print_summary()
 
 
 # ─── SUB-WRAPPERS ─────────────────────────────────────────────────────────────
 
 class _FilesWrapper:
-    def __init__(self, ig: ImmuneGate):
+    def __init__(self, ig: ImmuneGate) -> None:
         self._ig = ig
 
     def read(self, path: str) -> bool:
         return self._ig._execute(Action(
-            verb=Verb.READ, tool=Tool.FILES,
-            destination=Destination.INTERNAL, target=path,
-            source_trust=SourceTrust.INTERNAL_SYSTEM,
+            verb         = Verb.READ,
+            tool         = Tool.FILES,
+            destination  = Destination.INTERNAL,
+            target       = path,
+            source_trust = SourceTrust.INTERNAL_SYSTEM,
+        ))
+
+    async def read_async(self, path: str) -> bool:
+        return await self._ig._execute_async(Action(
+            verb         = Verb.READ,
+            tool         = Tool.FILES,
+            destination  = Destination.INTERNAL,
+            target       = path,
+            source_trust = SourceTrust.INTERNAL_SYSTEM,
         ))
 
     def write(self, path: str, content: str = "", sensitive: bool = False) -> bool:
         verb = Verb.WRITE_SENSITIVE if sensitive else Verb.WRITE
         ds   = detect_danger_signals(content)
         return self._ig._execute(Action(
-            verb=verb, tool=Tool.FILES,
-            destination=Destination.INTERNAL, target=path,
-            content=content, danger_signals=ds,
-            source_trust=self._ig._get_current_source_trust(),
+            verb         = verb,
+            tool         = Tool.FILES,
+            destination  = Destination.INTERNAL,
+            target       = path,
+            content      = content,
+            danger_signals = ds,
+            source_trust = self._ig._get_current_source_trust(),
+        ))
+
+    async def write_async(self, path: str, content: str = "", sensitive: bool = False) -> bool:
+        verb = Verb.WRITE_SENSITIVE if sensitive else Verb.WRITE
+        ds   = detect_danger_signals(content)
+        return await self._ig._execute_async(Action(
+            verb           = verb,
+            tool           = Tool.FILES,
+            destination    = Destination.INTERNAL,
+            target         = path,
+            content        = content,
+            danger_signals = ds,
+            source_trust   = self._ig._get_current_source_trust(),
         ))
 
     def delete(self, path: str) -> bool:
-        # Danger Signals im Pfad prüfen
         ds = detect_danger_signals(path)
         return self._ig._execute(Action(
-            verb=Verb.DELETE, tool=Tool.FILES,
-            destination=Destination.INTERNAL, target=path,
-            danger_signals=ds,
-            source_trust=self._ig._get_current_source_trust(),
+            verb           = Verb.DELETE,
+            tool           = Tool.FILES,
+            destination    = Destination.INTERNAL,
+            target         = path,
+            danger_signals = ds,
+            source_trust   = self._ig._get_current_source_trust(),
+        ))
+
+    async def delete_async(self, path: str) -> bool:
+        ds = detect_danger_signals(path)
+        return await self._ig._execute_async(Action(
+            verb           = Verb.DELETE,
+            tool           = Tool.FILES,
+            destination    = Destination.INTERNAL,
+            target         = path,
+            danger_signals = ds,
+            source_trust   = self._ig._get_current_source_trust(),
         ))
 
 
 class _EmailWrapper:
-    def __init__(self, ig: ImmuneGate):
+    def __init__(self, ig: ImmuneGate) -> None:
         self._ig = ig
 
     def send(self, recipient: str, subject: str, body: str = "") -> bool:
-        domain         = recipient.split("@")[-1] if "@" in recipient else recipient
-        internal_set   = set(self._ig.config.internal_domains) if self._ig.config else {"company.com", "intern.local"}
-        destination    = (Destination.INTERNAL
-                          if domain in internal_set
-                          else Destination.EXTERNAL)
+        domain       = recipient.split("@")[-1] if "@" in recipient else recipient
+        internal_set = (
+            set(self._ig.config.internal_domains)
+            if self._ig.config
+            else {"company.com", "intern.local"}
+        )
+        destination  = (
+            Destination.INTERNAL if domain in internal_set else Destination.EXTERNAL
+        )
         ds = detect_danger_signals(f"{subject} {body}")
         return self._ig._execute(Action(
-            verb=Verb.SEND, tool=Tool.EMAIL,
-            destination=destination, target=recipient,
-            content=f"Subject: {subject}\n\n{body}",
-            danger_signals=ds,
-            source_trust=self._ig._get_current_source_trust(),
+            verb           = Verb.SEND,
+            tool           = Tool.EMAIL,
+            destination    = destination,
+            target         = recipient,
+            content        = f"Subject: {subject}\n\n{body}",
+            danger_signals = ds,
+            source_trust   = self._ig._get_current_source_trust(),
+        ))
+
+    async def send_async(self, recipient: str, subject: str, body: str = "") -> bool:
+        domain       = recipient.split("@")[-1] if "@" in recipient else recipient
+        internal_set = (
+            set(self._ig.config.internal_domains)
+            if self._ig.config
+            else {"company.com", "intern.local"}
+        )
+        destination  = (
+            Destination.INTERNAL if domain in internal_set else Destination.EXTERNAL
+        )
+        ds = detect_danger_signals(f"{subject} {body}")
+        return await self._ig._execute_async(Action(
+            verb           = Verb.SEND,
+            tool           = Tool.EMAIL,
+            destination    = destination,
+            target         = recipient,
+            content        = f"Subject: {subject}\n\n{body}",
+            danger_signals = ds,
+            source_trust   = self._ig._get_current_source_trust(),
         ))
 
 
 class _WebWrapper:
-    def __init__(self, ig: ImmuneGate):
+    def __init__(self, ig: ImmuneGate) -> None:
         self._ig = ig
 
     def browse(self, url: str) -> bool:
         return self._ig._execute(Action(
-            verb=Verb.BROWSE, tool=Tool.WEB,
-            destination=Destination.EXTERNAL, target=url,
-            source_trust=SourceTrust.USER_DIRECT,
+            verb         = Verb.BROWSE,
+            tool         = Tool.WEB,
+            destination  = Destination.EXTERNAL,
+            target       = url,
+            source_trust = SourceTrust.USER_DIRECT,
+        ))
+
+    async def browse_async(self, url: str) -> bool:
+        return await self._ig._execute_async(Action(
+            verb         = Verb.BROWSE,
+            tool         = Tool.WEB,
+            destination  = Destination.EXTERNAL,
+            target       = url,
+            source_trust = SourceTrust.USER_DIRECT,
         ))
 
     def receive_content(self, url: str, content: str) -> str:
@@ -265,7 +391,7 @@ class _WebWrapper:
 
 # ─── HELPER ───────────────────────────────────────────────────────────────────
 
-def _get_current_source_trust(self) -> SourceTrust:
+def _get_current_source_trust(self: ImmuneGate) -> SourceTrust:
     """Gibt aktuelle Source Trust zurück (kontaminiert = web-level)."""
     if self._contaminated:
         return SourceTrust.WEB
@@ -273,6 +399,3 @@ def _get_current_source_trust(self) -> SourceTrust:
 
 # Monkey-patch auf ImmuneGate
 ImmuneGate._get_current_source_trust = _get_current_source_trust
-
-# Import shortcut
-from .danger_signals import detect_danger_signals

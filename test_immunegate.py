@@ -593,6 +593,99 @@ def test_owasp_compliance_report():
     assert isinstance(report["covered_categories"], list)
 
 
+# ─── SPRINT 10: ENTWICKLER-ERFAHRUNG ─────────────────────────────────────────
+
+# 1. CLI-Tool
+
+def test_cli_check_allow():
+    """CLI check: 'read /tmp/file.txt' → exit code 0 (ALLOW)."""
+    import argparse
+    from immunegate.cli import cmd_check
+    args = argparse.Namespace(
+        action="read /tmp/file.txt", config=None, source="user", owasp=False,
+    )
+    assert cmd_check(args) == 0
+
+
+def test_cli_check_deny():
+    """CLI check: 'send evil@example.com' --source web → exit code 2 (DENY)."""
+    import argparse
+    from immunegate.cli import cmd_check
+    # SEND + EXTERNAL + WEB → PRR-003 → DENY
+    args = argparse.Namespace(
+        action="send evil@example.com", config=None, source="web", owasp=False,
+    )
+    assert cmd_check(args) == 2
+
+
+def test_cli_check_ask():
+    """CLI check: 'delete /tmp/testfile.txt' → exit code 1 (ASK)."""
+    import argparse
+    from immunegate.cli import cmd_check
+    # DELETE (kein Sandbox-Pfad) → PRR-002 → ASK
+    args = argparse.Namespace(
+        action="delete /tmp/testfile.txt", config=None, source="user", owasp=False,
+    )
+    assert cmd_check(args) == 1
+
+
+def test_cli_version():
+    """CLI version gibt String mit aktueller Version zurück."""
+    import argparse
+    from unittest.mock import patch
+    from immunegate.cli import cmd_version
+    args = argparse.Namespace()
+    captured = []
+    with patch("builtins.print", side_effect=lambda *a: captured.append(" ".join(str(x) for x in a))):
+        code = cmd_version(args)
+    assert code == 0
+    assert any("0.9.0" in line for line in captured)
+
+
+def test_cli_owasp_shows_llm01():
+    """CLI owasp PRR-003 enthält LLM01 in der Ausgabe."""
+    import argparse
+    from unittest.mock import patch
+    from immunegate.cli import cmd_owasp
+    args = argparse.Namespace(rule_id="PRR-003")
+    outputs: list = []
+    with patch("builtins.print", side_effect=lambda *a: outputs.append(" ".join(str(x) for x in a))):
+        cmd_owasp(args)
+    combined = " ".join(outputs)
+    assert "LLM01" in combined
+
+
+# 2. Async-Support
+
+def test_async_gate_evaluate():
+    """PermissionGate.evaluate_async() gibt korrektes GateResult zurück."""
+    import asyncio
+    gate   = PermissionGate(AuditLog("async-test"))
+    action = make_action(verb=Verb.READ)
+    result = asyncio.run(gate.evaluate_async(action))
+    assert result.decision == Decision.ALLOW
+
+
+def test_async_wrapper_files_read():
+    """ig.files.read_async() gibt True zurück für sicheren READ."""
+    import asyncio
+    from immunegate import ImmuneGate
+    ig     = ImmuneGate(auto_deny_ask=True)
+    result = asyncio.run(ig.files.read_async("/tmp/test.txt"))
+    assert result is True
+
+
+# 3. Logging
+
+def test_logging_null_handler():
+    """immunegate Logger hat NullHandler (Best Practice für Libraries)."""
+    import logging
+    lg = logging.getLogger("immunegate")
+    assert any(isinstance(h, logging.NullHandler) for h in lg.handlers), (
+        "NullHandler fehlt – Library sollte eigenes Logging nicht ausgeben"
+    )
+
+
 # ─── TEST RUNNER ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -638,6 +731,15 @@ if __name__ == "__main__":
         test_owasp_prr_rules_have_mapping,
         test_owasp_categories_valid,
         test_owasp_compliance_report,
+        # Sprint 10 – Entwickler-Erfahrung
+        test_cli_check_allow,
+        test_cli_check_deny,
+        test_cli_check_ask,
+        test_cli_version,
+        test_cli_owasp_shows_llm01,
+        test_async_gate_evaluate,
+        test_async_wrapper_files_read,
+        test_logging_null_handler,
     ]
 
     passed = failed = 0

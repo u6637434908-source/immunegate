@@ -5,10 +5,13 @@ Loggt alle Events. Export als JSON + Session Summary.
 
 import hashlib
 import json
+import logging
 import uuid
 from datetime import datetime
 from dataclasses import asdict
 from typing import Optional, TYPE_CHECKING
+
+logger = logging.getLogger("immunegate.audit")
 
 if TYPE_CHECKING:
     from .schemas import GateResult, Action
@@ -161,7 +164,7 @@ class AuditLog:
         }
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(export, f, indent=2, ensure_ascii=False)
-        print(f"✅ Audit Log exportiert: {filepath}")
+        logger.info("Audit Log exportiert: %s", filepath)
 
     def print_summary(self):
         """Zeigt Session Summary in der Konsole."""

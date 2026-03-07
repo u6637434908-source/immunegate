@@ -24,6 +24,20 @@ class PermissionGate:
         self.config   = config
         self._plugins = plugins or []
 
+    async def evaluate_async(self, action: Action) -> GateResult:
+        """
+        Async-Wrapper für evaluate().
+
+        Führt die synchrone Gate-Logik in einem ThreadPool-Executor aus,
+        damit der Event-Loop nicht blockiert wird.
+
+        Beispiel:
+            result = await gate.evaluate_async(action)
+        """
+        import asyncio
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.evaluate, action)
+
     def evaluate(self, action: Action) -> GateResult:
         """
         Evaluiert eine Action. Gibt immer ein GateResult zurück.
