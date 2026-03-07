@@ -48,6 +48,7 @@ RULE_OWASP_MAPPING: dict[str, list[str]] = {
     "PRR-006": ["LLM02"],           # Read Sensitive → ASK → Sensitive Info Disclosure
     "PRR-007": ["LLM01", "LLM06"], # MASS_DESTRUCT Signal → Prompt Injection + Excessive Agency
     "PRR-008": ["LLM01", "LLM06"], # STEALTH Signal → Prompt Injection + Excessive Agency
+    "PRR-009": ["LLM06"],           # Shell/SSH-Ausführung → DENY → Excessive Agency
 
     # ── TOL: Toleranzregeln ───────────────────────────────────────────────────
     "TOL-001": [],                  # Send internal Allowlist → ALLOW – mitigiert

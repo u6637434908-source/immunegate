@@ -48,6 +48,10 @@ class ImmuneGateConfig:
     policy_version: str   = "v1.0"
     contact_email: str    = ""
 
+    # Rate-Limiting (Sprint 12)
+    rate_limit_max_actions: int    = 20  # max Aktionen pro Zeitfenster (0 = deaktiviert)
+    rate_limit_window_seconds: int = 60  # Zeitfenster in Sekunden
+
     # Tamper-Detection (gesetzt beim Laden – nicht in YAML konfigurierbar)
     config_file_path: str = ""
     config_file_hash: str = ""
@@ -223,5 +227,11 @@ def _build_config(raw: dict) -> ImmuneGateConfig:
         cfg.customer_name   = m.get("customer_name",   cfg.customer_name)
         cfg.policy_version  = m.get("policy_version",  cfg.policy_version)
         cfg.contact_email   = m.get("contact_email",   cfg.contact_email)
+
+    # Rate-Limiting
+    if "rate_limiting" in raw and isinstance(raw["rate_limiting"], dict):
+        r = raw["rate_limiting"]
+        cfg.rate_limit_max_actions      = r.get("max_actions",    cfg.rate_limit_max_actions)
+        cfg.rate_limit_window_seconds   = r.get("window_seconds", cfg.rate_limit_window_seconds)
 
     return cfg

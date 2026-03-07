@@ -99,6 +99,11 @@ def evaluate_policies(action: Action, config=None) -> list[PolicyMatch]:
         matches.append(PolicyMatch("PRR-008", Decision.DENY,
             "STEALTH-Signal erkannt – versteckte Aktionen sind verboten"))
 
+    # PRR-009: Shell-/SSH-Ausführung → immer DENY (Living-off-the-land Schutz)
+    if action.verb == Verb.EXECUTE:
+        matches.append(PolicyMatch("PRR-009", Decision.DENY,
+            "Shell- und SSH-Befehlsausführung ist grundsätzlich blockiert"))
+
     # ── TOL: Toleranzregeln (Kontext-Ausnahmen) ───────────────────────────────
 
     # TOL-001: Send internal auf Allowlist → ALLOW

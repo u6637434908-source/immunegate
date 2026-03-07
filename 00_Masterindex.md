@@ -11,7 +11,7 @@
 |---------|-------|--------------|
 | System-Kontext | [[CLAUDE.md]] | Arbeitsregeln, Sprints, Roadmap |
 | Core Package | [[immunegate/]] | Python-Package |
-| Tests | [[test_immunegate.py]] | 47 Unit Tests – immer grün |
+| Tests | [[test_immunegate.py]] | 76 Unit Tests – immer grün |
 | Beispiele | [[examples/]] | Demo + 5 Kundenszenarien |
 | UI | [[ui/]] | Approval UI + Scoreboard + Demo App |
 | Dokumentation | [[docs/]] | Getting Started, Config, Policy Rules |
@@ -31,7 +31,7 @@
 | **Demo** | https://u6637434908-source.github.io/immunegate/ui/demo_app.html |
 | **Author** | Bettina Mayerhofer |
 | **Lizenz** | MIT |
-| **Tests** | 47/47 grün |
+| **Tests** | 76/76 grün |
 
 ---
 
@@ -50,7 +50,7 @@
 | Sprint 9 | Sicherheit & EU AI Act Compliance | ✅ |
 | Sprint 10 | Entwickler-Erfahrung (CLI, Async, Logging) | ✅ |
 | Sprint 11 | Open Source Wachstum (GitHub Actions, Docs) | ✅ |
-| Sprint 12 | Mehr Interceptoren (subprocess, ftplib, paramiko) | 🔜 |
+| Sprint 12 | Mehr Interceptoren (subprocess, ftplib, paramiko, Rate-Limit) | ✅ |
 
 ---
 
@@ -84,7 +84,7 @@
 ## Aktueller Status
 
 - **Letzte Aktualisierung:** 2026-03-07
-- **Nächster Meilenstein:** Sprint 12 – Mehr Interceptoren (subprocess, ftplib, paramiko)
+- **Nächster Meilenstein:** Sprint 13 – offen (Roadmap)
 - **Tests:** 66/66 grün
 - **GitHub Pages:** Live ✅
 - **Präsentation:** Termin noch offen – Deep Research vorbereitet

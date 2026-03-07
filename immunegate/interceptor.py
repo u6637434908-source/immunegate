@@ -9,6 +9,9 @@ Abgefangene Funktionen:
 - smtplib.SMTP.sendmail                → SEND
 - urllib.request.urlopen               → BROWSE
 - requests.get/post/put/delete         → BROWSE / SEND
+- subprocess.run/Popen/call/...        → EXECUTE (Shell-Schutz, Sprint 12)
+- ftplib.FTP.storbinary/storlines      → UPLOAD (FTP-Schutz, Sprint 12)
+- paramiko.SSHClient.exec_command      → EXECUTE (SSH-Schutz, Sprint 12, optional)
 
 Verwendung:
     ig = ImmuneGate(config="kunde.yaml")
@@ -70,6 +73,9 @@ class ImmuneGateInterceptor:
         self._patch_filesystem()
         self._patch_email()
         self._patch_web()
+        self._patch_subprocess()   # Sprint 12: Living-off-the-land Schutz
+        self._patch_ftplib()       # Sprint 12: FTP-Upload Schutz
+        self._patch_paramiko()     # Sprint 12: SSH-Schutz (optional)
         self._active = True
         print("  [ImmuneGate Interceptor] ✅ Aktiviert – kein Bypass möglich.")
         print(f"  [ImmuneGate Interceptor] Abgefangen: {', '.join(self._patched)}")
@@ -79,13 +85,37 @@ class ImmuneGateInterceptor:
         if not self._active:
             return
         import shutil
-        os.remove           = _ORIGINALS["os.remove"]
-        os.unlink           = _ORIGINALS["os.unlink"]
-        os.rmdir            = _ORIGINALS["os.rmdir"]
-        shutil.rmtree       = _ORIGINALS["shutil.rmtree"]
-        builtins.open       = _ORIGINALS["builtins.open"]
-        smtplib.SMTP.sendmail = _ORIGINALS["smtplib.sendmail"]
+        os.remove              = _ORIGINALS["os.remove"]
+        os.unlink              = _ORIGINALS["os.unlink"]
+        os.rmdir               = _ORIGINALS["os.rmdir"]
+        shutil.rmtree          = _ORIGINALS["shutil.rmtree"]
+        builtins.open          = _ORIGINALS["builtins.open"]
+        smtplib.SMTP.sendmail  = _ORIGINALS["smtplib.sendmail"]
         urllib.request.urlopen = _ORIGINALS["urllib.urlopen"]
+
+        # Sprint 12: subprocess wiederherstellen
+        if "subprocess.run" in _ORIGINALS:
+            import subprocess
+            subprocess.run          = _ORIGINALS["subprocess.run"]
+            subprocess.Popen        = _ORIGINALS["subprocess.Popen"]
+            subprocess.call         = _ORIGINALS["subprocess.call"]
+            subprocess.check_call   = _ORIGINALS["subprocess.check_call"]
+            subprocess.check_output = _ORIGINALS["subprocess.check_output"]
+
+        # Sprint 12: ftplib wiederherstellen
+        if "ftplib.storbinary" in _ORIGINALS:
+            import ftplib
+            ftplib.FTP.storbinary = _ORIGINALS["ftplib.storbinary"]
+            ftplib.FTP.storlines  = _ORIGINALS["ftplib.storlines"]
+
+        # Sprint 12: paramiko wiederherstellen (optional)
+        if "paramiko.exec_command" in _ORIGINALS:
+            try:
+                import paramiko
+                paramiko.SSHClient.exec_command = _ORIGINALS["paramiko.exec_command"]
+            except ImportError:
+                pass
+
         self._active  = False
         self._patched = []
         print("  [ImmuneGate Interceptor] Deaktiviert – Originalfunktionen wiederhergestellt.")
@@ -192,6 +222,120 @@ class ImmuneGateInterceptor:
             pass  # requests nicht installiert – kein Problem
 
 
+    # ─── SUBPROCESS PATCHES (Sprint 12) ───────────────────────────────────────
+
+    def _patch_subprocess(self):
+        """Patcht subprocess.run/Popen/call/check_call/check_output."""
+        import subprocess
+        ig = self._ig
+
+        def _cmd_str(args):
+            """Normalisiert args zu einem lesbaren Befehlsstring."""
+            if isinstance(args, (list, tuple)):
+                return " ".join(str(a) for a in args)
+            return str(args)
+
+        _ORIGINALS["subprocess.run"]          = subprocess.run
+        _ORIGINALS["subprocess.Popen"]        = subprocess.Popen
+        _ORIGINALS["subprocess.call"]         = subprocess.call
+        _ORIGINALS["subprocess.check_call"]   = subprocess.check_call
+        _ORIGINALS["subprocess.check_output"] = subprocess.check_output
+
+        def _intercepted_run(args, **kwargs):
+            cmd = _cmd_str(args)
+            if not ig._intercept_execute(cmd):
+                raise PermissionError(f"[ImmuneGate] EXECUTE blockiert: {cmd}")
+            return _ORIGINALS["subprocess.run"](args, **kwargs)
+
+        def _intercepted_popen(args, **kwargs):
+            cmd = _cmd_str(args)
+            if not ig._intercept_execute(cmd):
+                raise PermissionError(f"[ImmuneGate] EXECUTE blockiert: {cmd}")
+            return _ORIGINALS["subprocess.Popen"](args, **kwargs)
+
+        def _intercepted_call(args, **kwargs):
+            cmd = _cmd_str(args)
+            if not ig._intercept_execute(cmd):
+                raise PermissionError(f"[ImmuneGate] EXECUTE blockiert: {cmd}")
+            return _ORIGINALS["subprocess.call"](args, **kwargs)
+
+        def _intercepted_check_call(args, **kwargs):
+            cmd = _cmd_str(args)
+            if not ig._intercept_execute(cmd):
+                raise PermissionError(f"[ImmuneGate] EXECUTE blockiert: {cmd}")
+            return _ORIGINALS["subprocess.check_call"](args, **kwargs)
+
+        def _intercepted_check_output(args, **kwargs):
+            cmd = _cmd_str(args)
+            if not ig._intercept_execute(cmd):
+                raise PermissionError(f"[ImmuneGate] EXECUTE blockiert: {cmd}")
+            return _ORIGINALS["subprocess.check_output"](args, **kwargs)
+
+        subprocess.run          = _intercepted_run
+        subprocess.Popen        = _intercepted_popen
+        subprocess.call         = _intercepted_call
+        subprocess.check_call   = _intercepted_check_call
+        subprocess.check_output = _intercepted_check_output
+
+        self._patched += [
+            "subprocess.run", "subprocess.Popen", "subprocess.call",
+            "subprocess.check_call", "subprocess.check_output",
+        ]
+
+    # ─── FTPLIB PATCHES (Sprint 12) ───────────────────────────────────────────
+
+    def _patch_ftplib(self):
+        """Patcht ftplib.FTP.storbinary und storlines (Upload-Schutz)."""
+        import ftplib
+        ig = self._ig
+
+        _ORIGINALS["ftplib.storbinary"] = ftplib.FTP.storbinary
+        _ORIGINALS["ftplib.storlines"]  = ftplib.FTP.storlines
+
+        def _intercepted_storbinary(self_ftp, cmd, fp, **kwargs):
+            server = getattr(self_ftp, "host", "unknown-ftp-server")
+            path   = cmd.split()[-1] if cmd.strip() else "(unbekannt)"
+            if not ig._intercept_ftp_upload(server, path):
+                raise PermissionError(f"[ImmuneGate] FTP UPLOAD blockiert: {server}/{path}")
+            return _ORIGINALS["ftplib.storbinary"](self_ftp, cmd, fp, **kwargs)
+
+        def _intercepted_storlines(self_ftp, cmd, fp, **kwargs):
+            server = getattr(self_ftp, "host", "unknown-ftp-server")
+            path   = cmd.split()[-1] if cmd.strip() else "(unbekannt)"
+            if not ig._intercept_ftp_upload(server, path):
+                raise PermissionError(f"[ImmuneGate] FTP UPLOAD blockiert: {server}/{path}")
+            return _ORIGINALS["ftplib.storlines"](self_ftp, cmd, fp, **kwargs)
+
+        ftplib.FTP.storbinary = _intercepted_storbinary
+        ftplib.FTP.storlines  = _intercepted_storlines
+        self._patched += ["ftplib.FTP.storbinary", "ftplib.FTP.storlines"]
+
+    # ─── PARAMIKO PATCHES (Sprint 12, optional) ───────────────────────────────
+
+    def _patch_paramiko(self):
+        """Patcht paramiko.SSHClient.exec_command – nur wenn paramiko installiert."""
+        try:
+            import paramiko
+            ig = self._ig
+
+            _ORIGINALS["paramiko.exec_command"] = paramiko.SSHClient.exec_command
+
+            def _intercepted_exec_command(self_ssh, command, **kwargs):
+                transport = getattr(self_ssh, "_transport", None)
+                host = getattr(transport, "hostname", "unknown-host") if transport else "unknown-host"
+                if not ig._intercept_ssh_exec(command, host):
+                    raise PermissionError(
+                        f"[ImmuneGate] SSH EXECUTE blockiert: {command!r} auf {host}"
+                    )
+                return _ORIGINALS["paramiko.exec_command"](self_ssh, command, **kwargs)
+
+            paramiko.SSHClient.exec_command = _intercepted_exec_command
+            self._patched.append("paramiko.SSHClient.exec_command")
+
+        except ImportError:
+            pass  # paramiko nicht installiert – kein Problem
+
+
 # ─── INTERCEPT HELPER METHODEN (werden auf ImmuneGate gepatcht) ───────────────
 
 def _intercept_delete(self, path: str) -> bool:
@@ -255,5 +399,53 @@ def _intercept_browse(self, url: str) -> bool:
         target       = url,
         source_trust = SourceTrust.USER_DIRECT,
         contaminated = self._contaminated,
+    )
+    return self._execute(action)
+
+
+def _intercept_execute(self, command: str) -> bool:
+    """Interne Methode: Shell-Befehl (subprocess) durch Gate leiten."""
+    from .schemas import Action, Verb, Tool, Destination
+    ds = detect_danger_signals(command)
+    action = Action(
+        verb           = Verb.EXECUTE,
+        tool           = Tool.SHELL,
+        destination    = Destination.INTERNAL,
+        target         = command[:200],
+        content        = command,
+        danger_signals = ds,
+        source_trust   = self._get_current_source_trust(),
+        contaminated   = self._contaminated,
+    )
+    return self._execute(action)
+
+
+def _intercept_ftp_upload(self, server: str, path: str) -> bool:
+    """Interne Methode: FTP-Upload durch Gate leiten."""
+    from .schemas import Action, Verb, Tool, Destination
+    action = Action(
+        verb         = Verb.UPLOAD,
+        tool         = Tool.FTP,
+        destination  = Destination.EXTERNAL,
+        target       = f"{server}/{path}",
+        source_trust = self._get_current_source_trust(),
+        contaminated = self._contaminated,
+    )
+    return self._execute(action)
+
+
+def _intercept_ssh_exec(self, command: str, host: str) -> bool:
+    """Interne Methode: SSH-Befehl (paramiko) durch Gate leiten."""
+    from .schemas import Action, Verb, Tool, Destination
+    ds = detect_danger_signals(command)
+    action = Action(
+        verb           = Verb.EXECUTE,
+        tool           = Tool.SSH,
+        destination    = Destination.EXTERNAL,
+        target         = f"{host}: {command[:100]}",
+        content        = command,
+        danger_signals = ds,
+        source_trust   = self._get_current_source_trust(),
+        contaminated   = self._contaminated,
     )
     return self._execute(action)

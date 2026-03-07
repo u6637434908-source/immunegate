@@ -4,6 +4,8 @@ Der zentrale Entscheidungspunkt. Kein Toolcall passiert ohne Gate.
 """
 
 from __future__ import annotations
+import time
+from collections import deque
 from typing import Optional
 from .schemas import Action, Decision, GateResult, ScoreBreakdown
 from .risk_engine import calculate_score, score_to_decision
@@ -14,15 +16,40 @@ from .audit import AuditLog
 class PermissionGate:
     """
     Hauptklasse. Evaluiert jede Action und gibt GateResult zurück.
-    
+
     Precedence: DENY > ALLOW > ASK > Score Fallback
     Fail-Safe: bei jedem Fehler → DENY
+    Rate-Limiting: max N Aktionen pro Zeitfenster (konfigurierbar)
     """
 
     def __init__(self, audit_log: AuditLog, config=None, plugins=None):
         self.audit    = audit_log
         self.config   = config
         self._plugins = plugins or []
+        self._rate_timestamps: deque = deque()  # Rolling-Window für Rate-Limiting
+
+    def _check_rate_limit(self) -> bool:
+        """
+        Rate-Limit prüfen (rolling window).
+        Returns True wenn Aktion erlaubt ist, False wenn Limit überschritten.
+        """
+        if not self.config:
+            return True
+        max_actions = self.config.rate_limit_max_actions
+        window_secs = self.config.rate_limit_window_seconds
+        if max_actions <= 0 or window_secs <= 0:
+            return True  # Rate-Limiting deaktiviert
+
+        now = time.monotonic()
+        # Alte Timestamps außerhalb des Fensters entfernen
+        while self._rate_timestamps and now - self._rate_timestamps[0] > window_secs:
+            self._rate_timestamps.popleft()
+
+        if len(self._rate_timestamps) >= max_actions:
+            return False  # Limit überschritten → DENY
+
+        self._rate_timestamps.append(now)
+        return True
 
     async def evaluate_async(self, action: Action) -> GateResult:
         """
@@ -59,6 +86,23 @@ class PermissionGate:
             return result
 
     def _evaluate_safe(self, action: Action) -> GateResult:
+        # 0. Rate-Limit prüfen (vor allem anderen)
+        if not self._check_rate_limit():
+            max_a = self.config.rate_limit_max_actions if self.config else "?"
+            win_s = self.config.rate_limit_window_seconds if self.config else "?"
+            result = GateResult(
+                action           = action,
+                decision         = Decision.DENY,
+                risk_score       = 100,
+                score_breakdown  = ScoreBreakdown(),
+                matched_rule_ids = ["RATE_LIMIT_EXCEEDED"],
+                reasons          = [
+                    f"Rate-Limit überschritten: max. {max_a} Aktionen pro {win_s}s",
+                ],
+            )
+            self.audit.log_risk_evaluated(result)
+            return result
+
         # 1. Score berechnen
         breakdown   = calculate_score(action)
         risk_score  = breakdown.total

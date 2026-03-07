@@ -9,6 +9,7 @@ from .schemas import Action, ScoreBreakdown, Decision, Verb, SourceTrust, Danger
 
 IMPACT: dict[Verb, int] = {
     Verb.SEND:           95,
+    Verb.EXECUTE:        95,  # Shell/SSH-Ausführung: höchstes Risiko
     Verb.UPLOAD:         90,
     Verb.DELETE:         85,
     Verb.WRITE_SENSITIVE:80,

@@ -21,6 +21,7 @@ class Verb(str, Enum):
     SEND           = "send"
     UPLOAD         = "upload"
     BROWSE         = "browse"
+    EXECUTE        = "execute"   # Shell-/SSH-Befehlsausführung
 
 class Destination(str, Enum):
     INTERNAL = "internal"
@@ -31,6 +32,9 @@ class Tool(str, Enum):
     FILES = "files"
     EMAIL = "email"
     WEB   = "web"
+    SHELL = "shell"  # subprocess / OS-Befehle (Living-off-the-land)
+    FTP   = "ftp"    # FTP-Transfers
+    SSH   = "ssh"    # SSH-Verbindungen (paramiko)
 
 class SourceTrust(str, Enum):
     INTERNAL_SYSTEM = "internal_system"

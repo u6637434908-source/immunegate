@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from immunegate.schemas import (
     Action, Verb, Tool, Destination, SourceTrust,
-    Decision, DangerSignal, BehaviorFlag
+    Decision, DangerSignal, BehaviorFlag, GateResult, ScoreBreakdown
 )
 from immunegate.risk_engine import calculate_score, score_to_decision
 from immunegate.policy_engine import evaluate_policies, apply_precedence, PolicyMatch
@@ -686,6 +686,115 @@ def test_logging_null_handler():
     )
 
 
+# ─── SPRINT 12: MEHR INTERCEPTOREN ───────────────────────────────────────────
+
+# 1. Schemas – neue Enums
+
+def test_verb_execute_in_schemas():
+    """Verb.EXECUTE und Tool.SHELL/FTP/SSH existieren in schemas.py."""
+    from immunegate.schemas import Verb, Tool
+    assert Verb.EXECUTE.value == "execute"
+    assert Tool.SHELL.value  == "shell"
+    assert Tool.FTP.value    == "ftp"
+    assert Tool.SSH.value    == "ssh"
+
+
+def test_risk_execute_impact():
+    """Verb.EXECUTE hat Impact 95 (höchstes Risiko)."""
+    from immunegate.risk_engine import IMPACT
+    from immunegate.schemas import Verb
+    assert IMPACT[Verb.EXECUTE] == 95
+
+
+# 2. Policy – PRR-009
+
+def test_policy_prr009_execute_deny():
+    """Verb.EXECUTE → DENY via PRR-009 (Shell-Schutz)."""
+    gate   = make_gate()
+    action = make_action(verb=Verb.EXECUTE, tool=Tool.SHELL,
+                         target="rm -rf /tmp/test")
+    result = gate.evaluate(action)
+    check(result, Decision.DENY, "PRR-009")
+
+
+# 3. Rate-Limiting
+
+def test_rate_limit_config_defaults():
+    """ImmuneGateConfig hat rate_limit_max_actions=20 und window=60."""
+    from immunegate.config import ImmuneGateConfig
+    cfg = ImmuneGateConfig()
+    assert cfg.rate_limit_max_actions    == 20
+    assert cfg.rate_limit_window_seconds == 60
+
+
+def test_rate_limit_allows_under_limit():
+    """Zwei Aktionen bei max=3 → normale Gate-Entscheidung (kein Rate-Limit)."""
+    from immunegate.config import ImmuneGateConfig
+    from immunegate.audit import AuditLog
+    cfg = ImmuneGateConfig(rate_limit_max_actions=3, rate_limit_window_seconds=60)
+    gate = PermissionGate(AuditLog("rl-test"), config=cfg)
+    for _ in range(2):
+        r = gate.evaluate(make_action(verb=Verb.READ))
+        assert r.decision == Decision.ALLOW
+        assert "RATE_LIMIT_EXCEEDED" not in r.matched_rule_ids
+
+
+def test_rate_limit_deny_over_limit():
+    """4. Aktion bei max=3 → RATE_LIMIT_EXCEEDED DENY."""
+    from immunegate.config import ImmuneGateConfig
+    from immunegate.audit import AuditLog
+    cfg  = ImmuneGateConfig(rate_limit_max_actions=3, rate_limit_window_seconds=60)
+    gate = PermissionGate(AuditLog("rl-over"), config=cfg)
+    for _ in range(3):
+        gate.evaluate(make_action(verb=Verb.READ))
+    # 4. Aktion muss geblockt werden
+    result = gate.evaluate(make_action(verb=Verb.READ))
+    assert result.decision         == Decision.DENY
+    assert "RATE_LIMIT_EXCEEDED"   in result.matched_rule_ids
+
+
+# 4. Wrapper – Shell/FTP/SSH
+
+def test_wrapper_shell_execute_deny():
+    """ig.shell.execute() → False (PRR-009: EXECUTE immer DENY)."""
+    from immunegate import ImmuneGate
+    ig = ImmuneGate(auto_deny_ask=True)
+    assert ig.shell.execute("ls /tmp") is False
+
+
+def test_wrapper_ftp_upload_deny():
+    """ig.ftp.upload() → False (Score 90 → DENY)."""
+    from immunegate import ImmuneGate
+    ig = ImmuneGate(auto_deny_ask=True)
+    assert ig.ftp.upload("ftp.example.com", "/secret/data.zip") is False
+
+
+def test_wrapper_ssh_exec_deny():
+    """ig.ssh.exec_command() → False (PRR-009: EXECUTE immer DENY)."""
+    from immunegate import ImmuneGate
+    ig = ImmuneGate(auto_deny_ask=True)
+    assert ig.ssh.exec_command("root@1.2.3.4", "cat /etc/passwd") is False
+
+
+# 5. Interceptor – subprocess
+
+def test_interceptor_subprocess_blocked():
+    """Nach activate(): subprocess.run() → PermissionError (PRR-009)."""
+    from immunegate import ImmuneGate
+    import subprocess
+    ig = ImmuneGate(auto_deny_ask=True)
+    ig.activate()
+    try:
+        raised = False
+        try:
+            subprocess.run(["echo", "hello"])
+        except PermissionError:
+            raised = True
+        assert raised, "subprocess.run sollte PermissionError werfen"
+    finally:
+        ig.deactivate()
+
+
 # ─── TEST RUNNER ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -740,6 +849,17 @@ if __name__ == "__main__":
         test_async_gate_evaluate,
         test_async_wrapper_files_read,
         test_logging_null_handler,
+        # Sprint 12 – Mehr Interceptoren
+        test_verb_execute_in_schemas,
+        test_risk_execute_impact,
+        test_policy_prr009_execute_deny,
+        test_rate_limit_config_defaults,
+        test_rate_limit_allows_under_limit,
+        test_rate_limit_deny_over_limit,
+        test_wrapper_shell_execute_deny,
+        test_wrapper_ftp_upload_deny,
+        test_wrapper_ssh_exec_deny,
+        test_interceptor_subprocess_blocked,
     ]
 
     passed = failed = 0

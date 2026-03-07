@@ -27,7 +27,9 @@ from .gate import PermissionGate
 from .config import load_config, ImmuneGateConfig
 from .interceptor import (ImmuneGateInterceptor,
                            _intercept_delete, _intercept_write,
-                           _intercept_send, _intercept_browse)
+                           _intercept_send, _intercept_browse,
+                           _intercept_execute, _intercept_ftp_upload,
+                           _intercept_ssh_exec)
 
 logger = logging.getLogger("immunegate")
 
@@ -101,15 +103,21 @@ class ImmuneGate:
         self._interceptor  = ImmuneGateInterceptor(self)
 
         # Intercept-Methoden auf self patchen
-        self._intercept_delete = lambda path:       _intercept_delete(self, path)
-        self._intercept_write  = lambda path, c="": _intercept_write(self, path, c)
-        self._intercept_send   = lambda rec, c="":  _intercept_send(self, rec, c)
-        self._intercept_browse = lambda url:        _intercept_browse(self, url)
+        self._intercept_delete     = lambda path:         _intercept_delete(self, path)
+        self._intercept_write      = lambda path, c="":   _intercept_write(self, path, c)
+        self._intercept_send       = lambda rec, c="":    _intercept_send(self, rec, c)
+        self._intercept_browse     = lambda url:          _intercept_browse(self, url)
+        self._intercept_execute    = lambda cmd:          _intercept_execute(self, cmd)
+        self._intercept_ftp_upload = lambda srv, pth:     _intercept_ftp_upload(self, srv, pth)
+        self._intercept_ssh_exec   = lambda cmd, host:    _intercept_ssh_exec(self, cmd, host)
 
         # Sub-Wrappers
         self.files = _FilesWrapper(self)
         self.email = _EmailWrapper(self)
         self.web   = _WebWrapper(self)
+        self.shell = _ShellWrapper(self)   # Sprint 12
+        self.ftp   = _FtpWrapper(self)     # Sprint 12
+        self.ssh   = _SshWrapper(self)     # Sprint 12
 
     def activate(self) -> None:
         """
@@ -387,6 +395,96 @@ class _WebWrapper:
     def receive_content(self, url: str, content: str) -> str:
         """Web-Inhalt empfangen und als untrusted registrieren."""
         return self._ig.receive_input(content, SourceTrust.WEB)
+
+
+class _ShellWrapper:
+    """Shell-Ausführung durch das Gate (subprocess-Schutz)."""
+
+    def __init__(self, ig: ImmuneGate) -> None:
+        self._ig = ig
+
+    def execute(self, command: str) -> bool:
+        """Shell-Befehl durch Gate evaluieren. PRR-009 → immer DENY."""
+        ds = detect_danger_signals(command)
+        return self._ig._execute(Action(
+            verb           = Verb.EXECUTE,
+            tool           = Tool.SHELL,
+            destination    = Destination.INTERNAL,
+            target         = command[:200],
+            content        = command,
+            danger_signals = ds,
+            source_trust   = self._ig._get_current_source_trust(),
+        ))
+
+    async def execute_async(self, command: str) -> bool:
+        ds = detect_danger_signals(command)
+        return await self._ig._execute_async(Action(
+            verb           = Verb.EXECUTE,
+            tool           = Tool.SHELL,
+            destination    = Destination.INTERNAL,
+            target         = command[:200],
+            content        = command,
+            danger_signals = ds,
+            source_trust   = self._ig._get_current_source_trust(),
+        ))
+
+
+class _FtpWrapper:
+    """FTP-Transfers durch das Gate."""
+
+    def __init__(self, ig: ImmuneGate) -> None:
+        self._ig = ig
+
+    def upload(self, server: str, path: str) -> bool:
+        """FTP-Upload durch Gate evaluieren. Score 90 → DENY."""
+        return self._ig._execute(Action(
+            verb         = Verb.UPLOAD,
+            tool         = Tool.FTP,
+            destination  = Destination.EXTERNAL,
+            target       = f"{server}/{path}",
+            source_trust = self._ig._get_current_source_trust(),
+        ))
+
+    async def upload_async(self, server: str, path: str) -> bool:
+        return await self._ig._execute_async(Action(
+            verb         = Verb.UPLOAD,
+            tool         = Tool.FTP,
+            destination  = Destination.EXTERNAL,
+            target       = f"{server}/{path}",
+            source_trust = self._ig._get_current_source_trust(),
+        ))
+
+
+class _SshWrapper:
+    """SSH-Ausführung durch das Gate (paramiko-Schutz)."""
+
+    def __init__(self, ig: ImmuneGate) -> None:
+        self._ig = ig
+
+    def exec_command(self, host: str, command: str) -> bool:
+        """SSH-Befehl durch Gate evaluieren. PRR-009 → immer DENY."""
+        ds = detect_danger_signals(command)
+        return self._ig._execute(Action(
+            verb           = Verb.EXECUTE,
+            tool           = Tool.SSH,
+            destination    = Destination.EXTERNAL,
+            target         = f"{host}: {command[:100]}",
+            content        = command,
+            danger_signals = ds,
+            source_trust   = self._ig._get_current_source_trust(),
+        ))
+
+    async def exec_command_async(self, host: str, command: str) -> bool:
+        ds = detect_danger_signals(command)
+        return await self._ig._execute_async(Action(
+            verb           = Verb.EXECUTE,
+            tool           = Tool.SSH,
+            destination    = Destination.EXTERNAL,
+            target         = f"{host}: {command[:100]}",
+            content        = command,
+            danger_signals = ds,
+            source_trust   = self._ig._get_current_source_trust(),
+        ))
 
 
 # ─── HELPER ───────────────────────────────────────────────────────────────────
