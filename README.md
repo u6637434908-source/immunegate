@@ -1,5 +1,11 @@
 # ImmuneGate
 
+[![Tests](https://github.com/u6637434908-source/immunegate/actions/workflows/tests.yml/badge.svg)](https://github.com/u6637434908-source/immunegate/actions/workflows/tests.yml)
+[![Coverage](https://img.shields.io/badge/coverage-69%25-yellowgreen)](https://github.com/u6637434908-source/immunegate/actions)
+[![Python](https://img.shields.io/badge/python-3.9%20|%203.10%20|%203.11%20|%203.12-blue)](https://pypi.org/project/immunegate/)
+[![Version](https://img.shields.io/badge/version-0.9.0-informational)](https://github.com/u6637434908-source/immunegate/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 **Das Immunsystem für KI-Agenten.**
 
 ImmuneGate ist ein deterministischer Security & Trust Layer, der zwischen KI-Agenten und ihren Tools sitzt. Jede Tool-Aktion – Dateizugriff, E-Mail, Web-Browsing – läuft durch das Gate, bevor sie ausgeführt wird. Die Entscheidung (ALLOW / ASK / DENY) ist regelbasiert, auditierbar und funktioniert ohne LLM-Aufrufe.
@@ -170,6 +176,30 @@ ig.files.delete("/projects/")
 
 ---
 
+## CLI
+
+```bash
+# Aktion direkt evaluieren
+immunegate check "delete /projects/"
+# → 🛑 DENY  |  delete /projects/  |  Rules: PRR-002
+
+immunegate check "send boss@gmail.com" --source web --owasp
+# → 🛑 DENY  |  OWASP: LLM01, LLM06
+
+immunegate check "read /tmp/report.txt"
+# → ✅ ALLOW  |  read /tmp/report.txt  |  Score: 20/100
+
+# OWASP LLM Top 10 Mapping anzeigen
+immunegate owasp PRR-003
+
+# Version
+immunegate version
+```
+
+**Exit-Codes:** `0` = ALLOW · `1` = ASK · `2` = DENY → CI/CD Pipeline-Integration möglich.
+
+---
+
 ## Kurzreferenz API
 
 ```python
@@ -214,7 +244,13 @@ Entwickelt von Bettina Mayerhofer im Rahmen des KOKIEU-Moduls 2026 (Konzeption K
 
 ## Contributing
 
-Pull Requests sind willkommen – besonders für neue Danger Signal Patterns, zusätzliche Sprachen, und Tool-Integrationen. Bitte vorher ein Issue öffnen um größere Änderungen abzustimmen.
+Pull Requests sind willkommen! Bitte lies zuerst den **[Contributing Guide](CONTRIBUTING.md)**.
+
+Besonders gesucht:
+- Neue Danger Signal Patterns (weitere Sprachen / Angriffsvektoren)
+- Neue Plugins für branchenspezifische Regeln
+- Tool-Integrationen (OpenAI Agents SDK, LangChain, AutoGen …)
+- Verbesserungen der Async-Unterstützung
 
 ---
 

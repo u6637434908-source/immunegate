@@ -49,7 +49,7 @@
 | Sprint 8 | Browser Demo-App (Plugin + Semantik + Scoreboard) | ✅ |
 | Sprint 9 | Sicherheit & EU AI Act Compliance | ✅ |
 | Sprint 10 | Entwickler-Erfahrung (CLI, Async, Logging) | ✅ |
-| Sprint 11 | Open Source Wachstum (GitHub Actions, Docs) | 🔜 |
+| Sprint 11 | Open Source Wachstum (GitHub Actions, Docs) | ✅ |
 | Sprint 12 | Mehr Interceptoren (subprocess, ftplib, paramiko) | 🔜 |
 
 ---
@@ -84,7 +84,7 @@
 ## Aktueller Status
 
 - **Letzte Aktualisierung:** 2026-03-07
-- **Nächster Meilenstein:** Sprint 11 – Open Source Wachstum (GitHub Actions, Docs)
+- **Nächster Meilenstein:** Sprint 12 – Mehr Interceptoren (subprocess, ftplib, paramiko)
 - **Tests:** 66/66 grün
 - **GitHub Pages:** Live ✅
 - **Präsentation:** Termin noch offen – Deep Research vorbereitet
