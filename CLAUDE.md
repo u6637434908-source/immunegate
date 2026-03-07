@@ -232,3 +232,31 @@ cat 00_Masterindex.md
 - [ ] `_Index.md` aktualisiert
 - [ ] `00_Masterindex.md` aktualisiert
 - [ ] `git add . && git commit && git push`
+
+---
+
+## Optimierungsplan Sprint 9-12
+
+### Sprint 9 – Sicherheit & EU AI Act Compliance
+- Kryptografisch signierte Audit Logs (SHA-256 Hash-Kette)
+- OWASP LLM Top 10 Mapping der 13 Policy-Regeln
+- Tamper-Detection beim Laden der Config-Datei
+- `__version__` in `__init__.py`
+
+### Sprint 10 – Entwickler-Erfahrung
+- CLI-Tool: `immunegate check "delete /projects/"`
+- Python `logging` statt Print-Ausgaben
+- Async-Support für moderne Agenten-Frameworks
+- Type Hints überall vervollständigen
+
+### Sprint 11 – Open Source Wachstum
+- GitHub Actions – automatische Tests bei jedem Push
+- Code Coverage Badge im README
+- Contributing Guide für externe Entwickler
+- Roadmap auf GitHub öffentlich als Issues
+
+### Sprint 12 – Mehr Interceptoren
+- `subprocess` abfangen (Living-off-the-land Angriffe)
+- `ftplib` abfangen
+- `paramiko` (SSH) abfangen
+- Rate-Limiting auf Gate-Ebene

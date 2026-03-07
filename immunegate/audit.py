@@ -3,6 +3,7 @@ ImmuneGate – Blackbox Audit / Flight Recorder
 Loggt alle Events. Export als JSON + Session Summary.
 """
 
+import hashlib
 import json
 import uuid
 from datetime import datetime
@@ -149,11 +150,12 @@ class AuditLog:
     # ─── EXPORT ───────────────────────────────────────────────────────────────
 
     def export_json(self, filepath: str):
-        """Exportiert vollständigen Audit Log als JSON."""
+        """Exportiert vollständigen Audit Log als JSON inkl. Chain-Verifikation."""
         export = {
             "session_id":      self.session_id,
             "exported_at":     datetime.now().isoformat(),
             "policy_version":  "1.0",
+            "chain_verified":  self.verify_chain(),
             "events":          self.events,
             "session_summary": self.get_session_summary(),
         }
@@ -181,13 +183,54 @@ class AuditLog:
                 print(f"    → {r['rule_id']}: {r['count']}x")
         print("═" * 55 + "\n")
 
+    # ─── CHAIN INTEGRITY ──────────────────────────────────────────────────────
+
+    def verify_chain(self) -> bool:
+        """
+        Prüft die Integrität der SHA-256 Hash-Kette.
+
+        Jedes Event enthält:
+          prev_hash   – chain_hash des Vorgängers (erstes Event: session_id)
+          chain_hash  – SHA-256(event ohne chain_hash-Feld)
+
+        Returns True wenn kein Event manipuliert wurde.
+        """
+        for i, event in enumerate(self.events):
+            # 1. Vorgänger-Verknüpfung prüfen
+            expected_prev = (
+                self.events[i - 1]["chain_hash"] if i > 0 else self.session_id
+            )
+            if event.get("prev_hash") != expected_prev:
+                return False
+
+            # 2. Hash des Events neu berechnen (ohne chain_hash-Feld)
+            event_body = {k: v for k, v in event.items() if k != "chain_hash"}
+            expected_hash = hashlib.sha256(
+                json.dumps(event_body, sort_keys=True, ensure_ascii=False).encode()
+            ).hexdigest()
+
+            if event.get("chain_hash") != expected_hash:
+                return False
+
+        return True
+
     # ─── INTERNAL ─────────────────────────────────────────────────────────────
 
     def _add_event(self, event_type: str, payload: dict):
-        self.events.append({
+        prev_hash = (
+            self.events[-1]["chain_hash"] if self.events else self.session_id
+        )
+        event = {
             "event_id":   str(uuid.uuid4()),
             "session_id": self.session_id,
             "event_type": event_type,
             "timestamp":  datetime.now().isoformat(),
             "payload":    payload,
-        })
+            "prev_hash":  prev_hash,
+        }
+        # chain_hash = SHA-256 aller Felder außer chain_hash selbst
+        chain_hash = hashlib.sha256(
+            json.dumps(event, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()
+        event["chain_hash"] = chain_hash
+        self.events.append(event)

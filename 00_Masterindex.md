@@ -12,7 +12,6 @@
 | System-Kontext | [[CLAUDE.md]] | Arbeitsregeln, Sprints, Roadmap |
 | Core Package | [[immunegate/]] | Python-Package |
 | Tests | [[test_immunegate.py]] | 47 Unit Tests – immer grün |
-| Plugins | [[plugins/]] | Beispiel-Plugins (no_sunday_deletes, hallertau) |
 | Beispiele | [[examples/]] | Demo + 5 Kundenszenarien |
 | UI | [[ui/]] | Approval UI + Scoreboard + Demo App |
 | Dokumentation | [[docs/]] | Getting Started, Config, Policy Rules |
@@ -27,11 +26,12 @@
 |------|--------|
 | **Name** | ImmuneGate |
 | **Tagline** | Das Immunsystem für KI-Agenten |
-| **Status** | Stufe 2 abgeschlossen – Open Source ready |
+| **Status** | Stufe 2 abgeschlossen – Optimierung läuft |
 | **GitHub** | https://github.com/u6637434908-source/immunegate |
 | **Demo** | https://u6637434908-source.github.io/immunegate/ui/demo_app.html |
 | **Author** | Bettina Mayerhofer |
 | **Lizenz** | MIT |
+| **Tests** | 47/47 grün |
 
 ---
 
@@ -45,16 +45,55 @@
 | Sprint 4 | YAML-Config + Monkey-Patching Interceptor | ✅ |
 | Sprint 5 | Danger Signals multilingual + PyPI + Docs | ✅ |
 | Sprint 6 | Semantische Danger Signals (sentence-transformers) | ✅ |
-| Sprint 7 | Plugin-System für eigene Regeln | ✅ |
-| Sprint 8 | Demo-App Browser (live Gate-Entscheidungen) | ✅ |
-| Sprint 9 | Pilotkunden – Config-Templates, Onboarding | 🔜 |
+| Sprint 7 | Plugin-System für eigene Kunden-Regeln | ✅ |
+| Sprint 8 | Browser Demo-App (Plugin + Semantik + Scoreboard) | ✅ |
+| Sprint 9 | Sicherheit & EU AI Act Compliance | ✅ |
+| Sprint 10 | Entwickler-Erfahrung (CLI, Async, Logging) | 🔜 |
+| Sprint 11 | Open Source Wachstum (GitHub Actions, Docs) | 🔜 |
+| Sprint 12 | Mehr Interceptoren (subprocess, ftplib, paramiko) | 🔜 |
+
+---
+
+## Optimierungsplan (Priorität nach Rangfolge)
+
+### 🥇 Sprint 9 – Sicherheit & EU AI Act Compliance
+- Kryptografisch signierte Audit Logs (SHA-256 Hash-Kette)
+- OWASP LLM Top 10 Mapping der 13 Policy-Regeln
+- Tamper-Detection beim Laden der Config-Datei
+- `__version__` in `__init__.py`
+
+### 🥈 Sprint 10 – Entwickler-Erfahrung
+- CLI-Tool: `immunegate check "delete /projects/"`
+- Python `logging` statt Print-Ausgaben
+- Async-Support für moderne Agenten-Frameworks
+- Type Hints überall vervollständigen
+
+### 🥉 Sprint 11 – Open Source Wachstum
+- GitHub Actions – automatische Tests bei jedem Push
+- Code Coverage Badge im README
+- Contributing Guide für externe Entwickler
+- Roadmap auf GitHub öffentlich als Issues
+
+### Sprint 12 – Mehr Interceptoren
+- `subprocess` abfangen (Living-off-the-land Angriffe)
+- `ftplib` und `paramiko` (SSH) abfangen
+- Rate-Limiting auf Gate-Ebene
 
 ---
 
 ## Aktueller Status
 
 - **Letzte Aktualisierung:** 2026-03-07
-- **Nächster Meilenstein:** Sprint 9 – Pilotkunden (Config-Templates, Onboarding)
-- **Tests:** 47/47 grün
+- **Nächster Meilenstein:** Sprint 10 – Entwickler-Erfahrung (CLI, Logging, Async)
+- **Tests:** 58/58 grün
 - **GitHub Pages:** Live ✅
-- **Demo-App:** Plugin-Simulation + Semantik-Simulation + Live-Scoreboard ✅
+- **Präsentation:** Termin noch offen – Deep Research vorbereitet
+
+---
+
+## Verwandte Dokumente
+
+- [[CLAUDE.md]] – Arbeitsregeln und Sprint-Planung
+- [[docs/getting_started.md]] – Quickstart für neue Nutzer
+- [[docs/policy_rules.md]] – Alle 13 Regeln erklärt
+- [[99_Berichte/_Index.md]] – Alle Sprint-Berichte

@@ -457,6 +457,142 @@ def test_plugin_immunegate_wrapper_loads_plugins():
     assert len(ig.gate._plugins) >= 2
 
 
+# ─── SPRINT 9: SICHERHEIT & EU AI ACT COMPLIANCE ─────────────────────────────
+
+# 1. __version__
+
+def test_version_exists():
+    """immunegate.__version__ ist gesetzt und ein nicht-leerer String."""
+    import immunegate
+    assert hasattr(immunegate, "__version__"), "__version__ fehlt in immunegate"
+    assert isinstance(immunegate.__version__, str)
+    assert immunegate.__version__ != ""
+
+
+# 2. SHA-256 Hash-Kette im Audit Log
+
+def test_audit_chain_hash_present():
+    """Jedes Event enthält prev_hash und chain_hash."""
+    log = AuditLog("test-chain-session")
+    log.log_input_received("USER_DIRECT", 0, [])
+    assert "chain_hash" in log.events[0]
+    assert "prev_hash"  in log.events[0]
+
+
+def test_audit_chain_verify_intact():
+    """verify_chain() gibt True zurück wenn kein Event manipuliert wurde."""
+    log = AuditLog("test-intact")
+    log.log_input_received("USER_DIRECT", 0, [])
+    log.log_input_received("WEB", -20, ["INJECTION"])
+    assert log.verify_chain() is True
+
+
+def test_audit_chain_verify_tampered():
+    """verify_chain() gibt False zurück wenn ein Event-Payload manipuliert wurde."""
+    log = AuditLog("test-tamper")
+    log.log_input_received("USER_DIRECT", 0, [])
+    log.log_input_received("WEB", -20, [])
+    # Payload manipulieren → chain_hash stimmt nicht mehr
+    log.events[0]["payload"]["source_kind"] = "EVIL"
+    assert log.verify_chain() is False
+
+
+def test_audit_chain_prev_hash_links():
+    """prev_hash jedes Events zeigt auf chain_hash des Vorgängers."""
+    log = AuditLog("test-links")
+    log.log_input_received("USER_DIRECT", 0, [])
+    log.log_input_received("WEB", -20, [])
+    # Event 0: prev_hash == session_id
+    assert log.events[0]["prev_hash"] == log.session_id
+    # Event 1: prev_hash == chain_hash von Event 0
+    assert log.events[1]["prev_hash"] == log.events[0]["chain_hash"]
+
+
+# 3. Config-Tamper-Detection
+
+def test_config_integrity_hash_stored():
+    """load_config() speichert SHA-256 Fingerprint der Datei."""
+    import tempfile, os
+    from immunegate.config import load_config
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write("session:\n  id: test-session\n")
+        tmp = f.name
+    try:
+        cfg = load_config(tmp)
+        assert cfg.config_file_hash != "", "config_file_hash ist leer"
+        assert cfg.config_file_path == os.path.abspath(tmp)
+    finally:
+        os.unlink(tmp)
+
+
+def test_config_integrity_verify_ok():
+    """verify_config_integrity() gibt True für unveränderte Datei."""
+    import tempfile, os
+    from immunegate.config import load_config, verify_config_integrity
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write("session:\n  id: test\n")
+        tmp = f.name
+    try:
+        cfg = load_config(tmp)
+        assert verify_config_integrity(cfg) is True
+    finally:
+        os.unlink(tmp)
+
+
+def test_config_integrity_verify_tampered():
+    """verify_config_integrity() gibt False wenn Datei nach dem Laden verändert wurde."""
+    import tempfile, os
+    from immunegate.config import load_config, verify_config_integrity
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write("session:\n  id: test\n")
+        tmp = f.name
+    try:
+        cfg = load_config(tmp)
+        # Datei nach dem Laden verändern → Tamper-Simulation
+        with open(tmp, "a") as fh:
+            fh.write("# tampered!\n")
+        assert verify_config_integrity(cfg) is False
+    finally:
+        os.unlink(tmp)
+
+
+# 4. OWASP LLM Top 10 Mapping
+
+def test_owasp_prr_rules_have_mapping():
+    """Alle sicherheitskritischen PRR-Regeln haben OWASP-Einträge."""
+    from immunegate.owasp import RULE_OWASP_MAPPING
+    critical_rules = ["PRR-001", "PRR-002", "PRR-003", "PRR-004", "PRR-007", "PRR-008"]
+    for rule in critical_rules:
+        assert rule in RULE_OWASP_MAPPING, f"{rule} fehlt im OWASP-Mapping"
+        assert len(RULE_OWASP_MAPPING[rule]) > 0, f"{rule} hat leere OWASP-Referenz"
+
+
+def test_owasp_categories_valid():
+    """Alle OWASP-IDs im Mapping sind gültige Top-10-Kategorien."""
+    from immunegate.owasp import RULE_OWASP_MAPPING, OWASP_CATEGORIES
+    for rule_id, cats in RULE_OWASP_MAPPING.items():
+        for cat in cats:
+            assert cat in OWASP_CATEGORIES, (
+                f"Ungültige Kategorie {cat!r} in Regel {rule_id}"
+            )
+
+
+def test_owasp_compliance_report():
+    """get_compliance_report() gibt vollständigen Report mit positivem Coverage zurück."""
+    from immunegate.owasp import get_compliance_report
+    all_rules = [
+        "PRR-001", "PRR-002", "PRR-003", "PRR-004", "PRR-005",
+        "PRR-006", "PRR-007", "PRR-008", "TOL-001", "TOL-002", "TOL-003",
+    ]
+    report = get_compliance_report(all_rules)
+    assert "covered_categories"       in report
+    assert "gate_relevant_categories" in report
+    assert "gate_relevant_covered"    in report
+    assert "coverage_pct"             in report
+    assert report["coverage_pct"] > 0, "Coverage muss > 0 sein"
+    assert isinstance(report["covered_categories"], list)
+
+
 # ─── TEST RUNNER ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -490,6 +626,18 @@ if __name__ == "__main__":
         test_plugin_integrated_in_gate_allow,
         test_plugin_core_deny_beats_plugin_allow,
         test_plugin_immunegate_wrapper_loads_plugins,
+        # Sprint 9 – Sicherheit & EU AI Act Compliance
+        test_version_exists,
+        test_audit_chain_hash_present,
+        test_audit_chain_verify_intact,
+        test_audit_chain_verify_tampered,
+        test_audit_chain_prev_hash_links,
+        test_config_integrity_hash_stored,
+        test_config_integrity_verify_ok,
+        test_config_integrity_verify_tampered,
+        test_owasp_prr_rules_have_mapping,
+        test_owasp_categories_valid,
+        test_owasp_compliance_report,
     ]
 
     passed = failed = 0

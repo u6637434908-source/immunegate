@@ -4,6 +4,7 @@ Lädt YAML-Config und stellt Defaults bereit.
 Keine externe Abhängigkeit – nutzt Python-Standardbibliothek.
 """
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass, field
@@ -44,6 +45,10 @@ class ImmuneGateConfig:
     policy_version: str   = "v1.0"
     contact_email: str    = ""
 
+    # Tamper-Detection (gesetzt beim Laden – nicht in YAML konfigurierbar)
+    config_file_path: str = ""
+    config_file_hash: str = ""
+
 
 # ─── LOADER ───────────────────────────────────────────────────────────────────
 
@@ -66,7 +71,13 @@ def load_config(path: Optional[str] = None) -> ImmuneGateConfig:
         return ImmuneGateConfig()
 
     raw = _parse_simple_yaml(path)
-    return _build_config(raw)
+    cfg = _build_config(raw)
+
+    # Tamper-Detection: SHA-256 Fingerprint der Config-Datei speichern
+    cfg.config_file_path = os.path.abspath(path)
+    cfg.config_file_hash = _compute_file_hash(path)
+
+    return cfg
 
 
 def _parse_simple_yaml(path: str) -> dict:
@@ -141,6 +152,36 @@ def _cast(value: str):
     except ValueError:
         pass
     return value
+
+
+def _compute_file_hash(path: str) -> str:
+    """SHA-256 Hash einer Datei (binär gelesen → kein Encoding-Problem)."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        h.update(f.read())
+    return h.hexdigest()
+
+
+def verify_config_integrity(config: ImmuneGateConfig) -> bool:
+    """
+    Prüft ob die Config-Datei seit dem Laden verändert wurde.
+
+    Berechnet den SHA-256 der Datei neu und vergleicht mit dem
+    beim Laden gespeicherten Fingerprint.
+
+    Returns:
+        True  – Datei unverändert (oder keine Datei geladen / nur Defaults)
+        False – Datei manipuliert oder nicht mehr vorhanden
+    """
+    if not config.config_file_path or not config.config_file_hash:
+        # Nur Defaults geladen – kein Fingerprint vorhanden → OK
+        return True
+
+    if not os.path.exists(config.config_file_path):
+        return False  # Datei verschwunden → Alarm
+
+    current_hash = _compute_file_hash(config.config_file_path)
+    return current_hash == config.config_file_hash
 
 
 def _build_config(raw: dict) -> ImmuneGateConfig:
