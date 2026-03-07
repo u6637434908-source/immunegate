@@ -32,9 +32,11 @@ requires-python = ">=3.9"
 dependencies = []   # Keine Pflichtabhängigkeiten – nur Python-Standardbibliothek
 
 [project.optional-dependencies]
-yaml = ["pyyaml>=6.0"]   # Für robusteres YAML-Parsing (config.py nutzt auch eingebauten Parser)
+yaml      = ["pyyaml>=6.0"]   # Für robusteres YAML-Parsing
+semantic  = ["sentence-transformers>=3.0"]  # Stufe-2-Erkennung (Semantik)
 dev  = [
     "pyyaml>=6.0",
+    "sentence-transformers>=3.0",
     "build>=1.0",
     "twine>=4.0",
 ]
