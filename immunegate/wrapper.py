@@ -32,11 +32,15 @@ class ImmuneGate:
         ig.web.browse("https://attacker.com")
     """
 
-    def __init__(self, session_id: str = None, auto_deny_ask: bool = False, config=None):
+    def __init__(self, session_id: str = None, auto_deny_ask: bool = False,
+                 config=None, plugins=None):
         """
         session_id:    Überschreibt Config session_id wenn angegeben
         auto_deny_ask: True = bei ASK automatisch DENY (non-interactive Modus)
         config:        Pfad zur YAML-Config oder ImmuneGateConfig-Objekt
+        plugins:       Pfad zum Plugin-Verzeichnis (str) oder Liste von
+                       BasePlugin-Instanzen. None = keine Plugins.
+                       Beispiel: plugins="plugins/"
         """
         # Config laden
         if isinstance(config, ImmuneGateConfig):
@@ -51,8 +55,21 @@ class ImmuneGate:
             print(f"\n  [ImmuneGate] Kunde: {self.config.customer_name} | Policy: {self.config.policy_version}")
             print(f"  [ImmuneGate] Domains: {', '.join(self.config.internal_domains)}")
 
+        # Plugins laden
+        from .plugins import BasePlugin, load_plugins
+        if isinstance(plugins, str):
+            loaded_plugins = load_plugins(plugins)
+            if loaded_plugins:
+                print(f"  [ImmuneGate] Plugins geladen: {len(loaded_plugins)} "
+                      f"({', '.join(p.plugin_id for p in loaded_plugins)})")
+        elif isinstance(plugins, list):
+            loaded_plugins = [p for p in plugins if isinstance(p, BasePlugin)]
+        else:
+            loaded_plugins = []
+
         self.audit          = AuditLog(effective_session)
-        self.gate           = PermissionGate(self.audit, config=self.config)
+        self.gate           = PermissionGate(self.audit, config=self.config,
+                                             plugins=loaded_plugins)
         self.auto_deny_ask  = auto_deny_ask
         self._contaminated  = False
         self._interceptor   = ImmuneGateInterceptor(self)

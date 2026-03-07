@@ -11,7 +11,8 @@
 |---------|-------|--------------|
 | System-Kontext | [[CLAUDE.md]] | Arbeitsregeln, Sprints, Roadmap |
 | Core Package | [[immunegate/]] | Python-Package |
-| Tests | [[test_immunegate.py]] | 36 Unit Tests – immer grün |
+| Tests | [[test_immunegate.py]] | 47 Unit Tests – immer grün |
+| Plugins | [[plugins/]] | Beispiel-Plugins (no_sunday_deletes, hallertau) |
 | Beispiele | [[examples/]] | Demo + 5 Kundenszenarien |
 | UI | [[ui/]] | Approval UI + Scoreboard + Demo App |
 | Dokumentation | [[docs/]] | Getting Started, Config, Policy Rules |
@@ -43,15 +44,15 @@
 | Sprint 3 | Behavior Signals (BURST_RISK, NEW_EXTERNAL_TARGET) | ✅ |
 | Sprint 4 | YAML-Config + Monkey-Patching Interceptor | ✅ |
 | Sprint 5 | Danger Signals multilingual + PyPI + Docs | ✅ |
-| Sprint 6 | Semantische Danger Signals | 🔜 |
-| Sprint 7 | Plugin-System für eigene Regeln | 🔜 |
+| Sprint 6 | Semantische Danger Signals (sentence-transformers) | ✅ |
+| Sprint 7 | Plugin-System für eigene Regeln | ✅ |
 | Sprint 8 | Demo-App Browser (live Gate-Entscheidungen) | 🔜 |
 
 ---
 
 ## Aktueller Status
 
-- **Letzte Aktualisierung:** 2026-03-06
-- **Nächster Meilenstein:** Sprint 6 – Semantische Danger Signals
-- **Tests:** 36/36 grün
+- **Letzte Aktualisierung:** 2026-03-07
+- **Nächster Meilenstein:** Sprint 8 – Demo-App Browser
+- **Tests:** 47/47 grün
 - **GitHub Pages:** Live ✅

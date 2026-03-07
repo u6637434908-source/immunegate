@@ -319,6 +319,144 @@ def test_precedence_empty_returns_none():
     assert apply_precedence([]) is None
 
 
+# ─── PLUGIN SYSTEM ────────────────────────────────────────────────────────────
+
+def test_plugin_hallertau_known_domain():
+    """HallertauAllowlist gibt ALLOW für bekannte Domain."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "plugins"))
+    from hallertau_allowlist import HallertauAllowlistPlugin
+    plugin = HallertauAllowlistPlugin()
+    action = make_action(
+        verb=Verb.SEND, tool=Tool.EMAIL,
+        destination=Destination.EXTERNAL,
+        target="info@reiterhof-ried.de",
+        source_trust=SourceTrust.USER_DIRECT,
+    )
+    result = plugin.evaluate(action)
+    assert result is not None
+    assert result.decision == Decision.ALLOW
+    assert "reiterhof-ried.de" in result.reason
+
+def test_plugin_hallertau_unknown_domain():
+    """HallertauAllowlist gibt None für unbekannte Domain."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "plugins"))
+    from hallertau_allowlist import HallertauAllowlistPlugin
+    plugin = HallertauAllowlistPlugin()
+    action = make_action(
+        verb=Verb.SEND, tool=Tool.EMAIL,
+        destination=Destination.EXTERNAL,
+        target="attacker@evil.com",
+        source_trust=SourceTrust.USER_DIRECT,
+    )
+    assert plugin.evaluate(action) is None
+
+def test_plugin_no_sunday_non_sunday():
+    """NoSundayDeletes gibt None zurück wenn heute kein Sonntag ist."""
+    import sys, os
+    from datetime import datetime
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "plugins"))
+    from no_sunday_deletes import NoSundayDeletesPlugin
+    plugin = NoSundayDeletesPlugin()
+    action = make_action(verb=Verb.DELETE, target="/projects/old.log")
+    result = plugin.evaluate(action)
+    if datetime.now().weekday() == 6:   # Heute ist Sonntag
+        assert result is not None and result.decision == Decision.ASK
+    else:                               # Kein Sonntag
+        assert result is None
+
+def test_plugin_no_sunday_read_always_none():
+    """NoSundayDeletes gibt nie etwas zurück für READ (nur DELETE)."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "plugins"))
+    from no_sunday_deletes import NoSundayDeletesPlugin
+    plugin = NoSundayDeletesPlugin()
+    action = make_action(verb=Verb.READ, target="/projects/report.pdf")
+    assert plugin.evaluate(action) is None
+
+def test_plugin_load_from_directory():
+    """load_plugins lädt beide Plugins aus dem plugins/ Verzeichnis."""
+    import os
+    from immunegate.plugins import load_plugins
+    plugins_dir = os.path.join(os.path.dirname(__file__), "plugins")
+    plugins = load_plugins(plugins_dir)
+    assert len(plugins) >= 2
+    ids = [p.plugin_id for p in plugins]
+    assert "PLUGIN-HALLERTAU-ALLOWLIST" in ids
+    assert "PLUGIN-NO-SUNDAY-DELETE" in ids
+
+def test_plugin_fail_safe_broken_plugin():
+    """Crashendes Plugin wird ignoriert – Gate läuft weiter."""
+    from immunegate.plugins import BasePlugin, run_plugins
+    from immunegate.schemas import Action
+
+    class BrokenPlugin(BasePlugin):
+        def evaluate(self, action):
+            raise RuntimeError("Absichtlicher Absturz")
+
+    action  = make_action(verb=Verb.READ)
+    results = run_plugins([BrokenPlugin()], action)
+    assert results == []    # Kein Crash, leere Liste
+
+def test_plugin_fail_safe_empty_dir():
+    """load_plugins gibt [] zurück für leeres Verzeichnis."""
+    import tempfile
+    from immunegate.plugins import load_plugins
+    with tempfile.TemporaryDirectory() as tmp:
+        assert load_plugins(tmp) == []
+
+def test_plugin_fail_safe_nonexistent_dir():
+    """load_plugins gibt [] zurück wenn Verzeichnis nicht existiert."""
+    from immunegate.plugins import load_plugins
+    assert load_plugins("/nope/does/not/exist") == []
+
+def test_plugin_integrated_in_gate_allow():
+    """Plugin-ALLOW überschreibt Core-ASK (TOL-003 → PLUGIN-HALLERTAU)."""
+    import os
+    from immunegate.plugins import load_plugins
+    plugins_dir = os.path.join(os.path.dirname(__file__), "plugins")
+    gate = PermissionGate(AuditLog(), plugins=load_plugins(plugins_dir))
+    # reiterhof-ried.de ist extern, USER_DIRECT → Core würde TOL-003 (ASK) feuern
+    # Plugin gibt ALLOW → ALLOW > ASK → Entscheidung ALLOW
+    action = make_action(
+        verb=Verb.SEND, tool=Tool.EMAIL,
+        destination=Destination.EXTERNAL,
+        source_trust=SourceTrust.USER_DIRECT,
+        target="info@reiterhof-ried.de",
+        content="Subject: Buchung\n\nGuten Tag!",
+    )
+    result = gate.evaluate(action)
+    assert result.decision == Decision.ALLOW
+    assert "PLUGIN-HALLERTAU-ALLOWLIST" in result.matched_rule_ids
+
+def test_plugin_core_deny_beats_plugin_allow():
+    """Core-DENY (PRR-003: WEB-Source) schlägt Plugin-ALLOW."""
+    import os
+    from immunegate.plugins import load_plugins
+    plugins_dir = os.path.join(os.path.dirname(__file__), "plugins")
+    gate = PermissionGate(AuditLog(), plugins=load_plugins(plugins_dir))
+    # WEB-Source → PRR-003 DENY; Plugin würde ALLOW wollen → DENY gewinnt
+    action = make_action(
+        verb=Verb.SEND, tool=Tool.EMAIL,
+        destination=Destination.EXTERNAL,
+        source_trust=SourceTrust.WEB,           # untrusted!
+        target="info@reiterhof-ried.de",
+    )
+    result = gate.evaluate(action)
+    assert result.decision == Decision.DENY
+    assert "PRR-003" in result.matched_rule_ids
+
+def test_plugin_immunegate_wrapper_loads_plugins():
+    """ImmuneGate(plugins='plugins/') lädt Plugins aus Verzeichnis."""
+    import os
+    from immunegate import ImmuneGate
+    plugins_dir = os.path.join(os.path.dirname(__file__), "plugins")
+    ig = ImmuneGate(auto_deny_ask=True, plugins=plugins_dir)
+    # Gate muss Plugins kennen
+    assert len(ig.gate._plugins) >= 2
+
+
 # ─── TEST RUNNER ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -344,6 +482,14 @@ if __name__ == "__main__":
         test_failsafe_clean_session_not_contaminated,
         test_precedence_deny_beats_allow, test_precedence_deny_beats_ask,
         test_precedence_allow_beats_ask, test_precedence_empty_returns_none,
+        # Plugin System
+        test_plugin_hallertau_known_domain, test_plugin_hallertau_unknown_domain,
+        test_plugin_no_sunday_non_sunday, test_plugin_no_sunday_read_always_none,
+        test_plugin_load_from_directory, test_plugin_fail_safe_broken_plugin,
+        test_plugin_fail_safe_empty_dir, test_plugin_fail_safe_nonexistent_dir,
+        test_plugin_integrated_in_gate_allow,
+        test_plugin_core_deny_beats_plugin_allow,
+        test_plugin_immunegate_wrapper_loads_plugins,
     ]
 
     passed = failed = 0

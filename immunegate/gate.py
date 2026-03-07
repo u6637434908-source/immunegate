@@ -19,9 +19,10 @@ class PermissionGate:
     Fail-Safe: bei jedem Fehler → DENY
     """
 
-    def __init__(self, audit_log: AuditLog, config=None):
-        self.audit  = audit_log
-        self.config = config
+    def __init__(self, audit_log: AuditLog, config=None, plugins=None):
+        self.audit    = audit_log
+        self.config   = config
+        self._plugins = plugins or []
 
     def evaluate(self, action: Action) -> GateResult:
         """
@@ -48,8 +49,16 @@ class PermissionGate:
         breakdown   = calculate_score(action)
         risk_score  = breakdown.total
 
-        # 2. Policy Engine evaluieren
+        # 2. Core Policy Engine evaluieren
         matches     = evaluate_policies(action, config=self.config)
+
+        # 2b. Plugins ausführen (nach Core, vor Precedence-Entscheidung)
+        #     Fail-Safe: Fehler in run_plugins → leere Liste, Gate läuft weiter
+        if self._plugins:
+            from .plugins import run_plugins
+            plugin_matches = run_plugins(self._plugins, action)
+            matches.extend(plugin_matches)
+
         top_match   = apply_precedence(matches)
 
         # 3. Entscheidung treffen
