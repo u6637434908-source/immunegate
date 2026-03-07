@@ -46,13 +46,15 @@
 | Sprint 5 | Danger Signals multilingual + PyPI + Docs | ✅ |
 | Sprint 6 | Semantische Danger Signals (sentence-transformers) | ✅ |
 | Sprint 7 | Plugin-System für eigene Regeln | ✅ |
-| Sprint 8 | Demo-App Browser (live Gate-Entscheidungen) | 🔜 |
+| Sprint 8 | Demo-App Browser (live Gate-Entscheidungen) | ✅ |
+| Sprint 9 | Pilotkunden – Config-Templates, Onboarding | 🔜 |
 
 ---
 
 ## Aktueller Status
 
 - **Letzte Aktualisierung:** 2026-03-07
-- **Nächster Meilenstein:** Sprint 8 – Demo-App Browser
+- **Nächster Meilenstein:** Sprint 9 – Pilotkunden (Config-Templates, Onboarding)
 - **Tests:** 47/47 grün
 - **GitHub Pages:** Live ✅
+- **Demo-App:** Plugin-Simulation + Semantik-Simulation + Live-Scoreboard ✅
